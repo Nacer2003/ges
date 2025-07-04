@@ -18,16 +18,22 @@ export const useAuth = () => {
             setUser({
               id: firebaseUser.uid,
               email: firebaseUser.email!,
+              nom: userData.nom || '',
+              prenom: userData.prenom || '',
               role: userData.role,
               magasin_id: userData.magasin_id,
+              image_url: userData.image_url,
               createdAt: userData.createdAt?.toDate() || new Date()
             });
           } else {
             // Si le document n'existe pas, le créer avec un rôle par défaut
             const newUserData = {
               email: firebaseUser.email!,
+              nom: '',
+              prenom: '',
               role: 'employe' as const,
               magasin_id: null,
+              image_url: '',
               createdAt: new Date()
             };
             
@@ -36,8 +42,11 @@ export const useAuth = () => {
             setUser({
               id: firebaseUser.uid,
               email: firebaseUser.email!,
+              nom: '',
+              prenom: '',
               role: 'employe',
               magasin_id: null,
+              image_url: '',
               createdAt: new Date()
             });
           }

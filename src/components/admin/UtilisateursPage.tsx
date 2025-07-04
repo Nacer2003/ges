@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { collection, getDocs, updateDoc, deleteDoc, doc, setDoc, query, where } from 'firebase/firestore';
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
+import { createUserWithEmailAndPassword, deleteUser, signInWithEmailAndPassword } from 'firebase/auth';
 import { Plus, Edit, Trash2, Search, Users, Shield, User, Save, X, AlertTriangle } from 'lucide-react';
 import { db, auth } from '../../config/firebase';
 import { User as UserType, Magasin } from '../../types';
 import { useAuth } from '../../hooks/useAuth';
+import { ImageUpload } from '../ImageUpload';
+import { uploadToCloudinary } from '../../config/cloudinary';
 import toast from 'react-hot-toast';
 
 export const UtilisateursPage: React.FC = () => {
@@ -17,9 +19,12 @@ export const UtilisateursPage: React.FC = () => {
   const [editingUser, setEditingUser] = useState<UserType | null>(null);
   const [formData, setFormData] = useState({
     email: '',
+    nom: '',
+    prenom: '',
     password: '',
     role: 'employe' as 'admin' | 'employe',
-    magasin_id: ''
+    magasin_id: '',
+    image_url: ''
   });
 
   useEffect(() => {
@@ -62,11 +67,21 @@ export const UtilisateursPage: React.FC = () => {
     setLoading(true);
 
     try {
+      // Upload de l'image si nécessaire
+      let imageUrl = formData.image_url;
+      if ((window as any).pendingImageFile) {
+        imageUrl = await uploadToCloudinary((window as any).pendingImageFile);
+        delete (window as any).pendingImageFile;
+      }
+
       if (editingUser) {
         // Modification d'un utilisateur existant
         const updateData: any = {
+          nom: formData.nom,
+          prenom: formData.prenom,
           role: formData.role,
-          magasin_id: formData.magasin_id || null
+          magasin_id: formData.magasin_id || null,
+          image_url: imageUrl
         };
 
         await updateDoc(doc(db, 'users', editingUser.id), updateData);
@@ -74,29 +89,33 @@ export const UtilisateursPage: React.FC = () => {
       } else {
         // Création d'un nouvel utilisateur
         try {
-          // Sauvegarder les informations de l'admin actuel
-          const adminEmail = currentUser?.email;
-          const adminPassword = prompt('Entrez votre mot de passe admin pour confirmer la création:');
-          
-          if (!adminPassword) {
-            toast.error('Mot de passe admin requis');
-            return;
-          }
-
           // Créer le nouvel utilisateur
           const userCredential = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
           
           // Créer le document utilisateur
           await setDoc(doc(db, 'users', userCredential.user.uid), {
             email: formData.email,
+            nom: formData.nom,
+            prenom: formData.prenom,
             role: formData.role,
             magasin_id: formData.magasin_id || null,
+            image_url: imageUrl,
             createdAt: new Date()
           });
           
           // Reconnecter l'admin immédiatement
-          if (adminEmail) {
-            await signInWithEmailAndPassword(auth, adminEmail, adminPassword);
+          if (currentUser?.email) {
+            // Utiliser un délai pour éviter les conflits
+            setTimeout(async () => {
+              try {
+                const adminPassword = prompt('Entrez votre mot de passe admin pour vous reconnecter:');
+                if (adminPassword) {
+                  await signInWithEmailAndPassword(auth, currentUser.email, adminPassword);
+                }
+              } catch (error) {
+                console.error('Erreur de reconnexion admin:', error);
+              }
+            }, 100);
           }
           
           toast.success('Utilisateur créé avec succès');
@@ -105,8 +124,6 @@ export const UtilisateursPage: React.FC = () => {
             toast.error('Cette adresse email est déjà utilisée');
           } else if (authError.code === 'auth/weak-password') {
             toast.error('Le mot de passe doit contenir au moins 6 caractères');
-          } else if (authError.code === 'auth/wrong-password') {
-            toast.error('Mot de passe admin incorrect');
           } else {
             toast.error('Erreur lors de la création du compte: ' + authError.message);
           }
@@ -128,18 +145,21 @@ export const UtilisateursPage: React.FC = () => {
     setEditingUser(user);
     setFormData({
       email: user.email,
+      nom: user.nom || '',
+      prenom: user.prenom || '',
       password: '',
       role: user.role,
-      magasin_id: user.magasin_id || ''
+      magasin_id: user.magasin_id || '',
+      image_url: user.image_url || ''
     });
     setShowModal(true);
   };
 
   const handleDelete = async (user: UserType) => {
-    if (!confirm('Êtes-vous sûr de vouloir supprimer cet utilisateur ? Cela supprimera aussi son historique de pointages.')) return;
+    if (!confirm('Êtes-vous sûr de vouloir supprimer cet utilisateur ? Cela supprimera aussi son historique de pointages et son compte d\'authentification.')) return;
 
     try {
-      // Supprimer l'utilisateur
+      // Supprimer l'utilisateur de Firestore
       await deleteDoc(doc(db, 'users', user.id));
       
       // Supprimer l'historique des présences de cet utilisateur
@@ -153,6 +173,7 @@ export const UtilisateursPage: React.FC = () => {
       await Promise.all(deletePromises);
       
       toast.success('Utilisateur et son historique supprimés avec succès');
+      toast.info('Note: Le compte d\'authentification Firebase doit être supprimé manuellement depuis la console Firebase');
       fetchUsers();
     } catch (error) {
       toast.error('Erreur lors de la suppression');
@@ -162,16 +183,21 @@ export const UtilisateursPage: React.FC = () => {
   const resetForm = () => {
     setFormData({
       email: '',
+      nom: '',
+      prenom: '',
       password: '',
       role: 'employe',
-      magasin_id: ''
+      magasin_id: '',
+      image_url: ''
     });
     setEditingUser(null);
     setShowModal(false);
   };
 
   const filteredUsers = users.filter(user =>
-    user.email.toLowerCase().includes(searchTerm.toLowerCase())
+    user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    user.nom.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    user.prenom.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   if (loading && users.length === 0) {
@@ -205,7 +231,7 @@ export const UtilisateursPage: React.FC = () => {
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
           <input
             type="text"
-            placeholder="Rechercher par email..."
+            placeholder="Rechercher par email, nom ou prénom..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -244,13 +270,23 @@ export const UtilisateursPage: React.FC = () => {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
                         <div className="flex-shrink-0 h-10 w-10">
-                          <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
-                            <User className="h-5 w-5 text-blue-600" />
-                          </div>
+                          {user.image_url ? (
+                            <img
+                              src={user.image_url}
+                              alt={`${user.prenom} ${user.nom}`}
+                              className="h-10 w-10 rounded-full object-cover"
+                            />
+                          ) : (
+                            <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
+                              <User className="h-5 w-5 text-blue-600" />
+                            </div>
+                          )}
                         </div>
                         <div className="ml-4">
-                          <div className="text-sm font-medium text-gray-900">{user.email}</div>
-                          <div className="text-sm text-gray-500">ID: {user.id.substring(0, 8)}...</div>
+                          <div className="text-sm font-medium text-gray-900">
+                            {user.prenom} {user.nom}
+                          </div>
+                          <div className="text-sm text-gray-500">{user.email}</div>
                         </div>
                       </div>
                     </td>
@@ -323,7 +359,7 @@ export const UtilisateursPage: React.FC = () => {
       {/* Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-2xl w-full">
+          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-2xl font-bold text-gray-900">
@@ -338,6 +374,41 @@ export const UtilisateursPage: React.FC = () => {
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-6">
+                <ImageUpload
+                  currentImage={formData.image_url}
+                  onImageChange={(imageUrl) => setFormData({ ...formData, image_url: imageUrl })}
+                />
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Prénom *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={formData.prenom}
+                      onChange={(e) => setFormData({ ...formData, prenom: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="Prénom"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Nom *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={formData.nom}
+                      onChange={(e) => setFormData({ ...formData, nom: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="Nom de famille"
+                    />
+                  </div>
+                </div>
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Adresse email *

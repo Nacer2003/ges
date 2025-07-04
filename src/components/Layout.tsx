@@ -76,7 +76,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
           </button>
         </div>
 
-        <nav className="mt-5 px-2">
+        <nav className="mt-5 px-2 flex-1">
           {menuItems.map((item) => (
             <button
               key={item.path}
@@ -91,28 +91,6 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
             </button>
           ))}
         </nav>
-
-        <div className="absolute bottom-0 w-full p-4 border-t">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
-                <span className="text-white text-sm font-medium">
-                  {user?.email.charAt(0).toUpperCase()}
-                </span>
-              </div>
-              <div>
-                <p className="text-sm font-medium text-gray-900">{user?.email}</p>
-                <p className="text-xs text-gray-500 capitalize">{user?.role}</p>
-              </div>
-            </div>
-            <button
-              onClick={handleLogout}
-              className="text-gray-400 hover:text-gray-600 transition-colors duration-200"
-            >
-              <LogOut className="h-5 w-5" />
-            </button>
-          </div>
-        </div>
       </div>
 
       {/* Main content */}
@@ -134,15 +112,35 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
             
             {/* User info and notifications in top right */}
             <div className="flex items-center space-x-4">
-              <NotificationWidget />
-              <div className="flex items-center space-x-2 bg-gray-50 rounded-lg px-3 py-2">
-                <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
-                  <User className="h-4 w-4 text-white" />
+              {user?.role === 'admin' && <NotificationWidget />}
+              
+              <div className="flex items-center space-x-3 bg-gray-50 rounded-lg px-3 py-2">
+                <div className="w-8 h-8 rounded-full overflow-hidden">
+                  {user?.image_url ? (
+                    <img
+                      src={user.image_url}
+                      alt={`${user.prenom} ${user.nom}`}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-blue-600 flex items-center justify-center">
+                      <User className="h-4 w-4 text-white" />
+                    </div>
+                  )}
                 </div>
                 <div className="text-sm">
-                  <p className="font-medium text-gray-900">{user?.email}</p>
+                  <p className="font-medium text-gray-900">
+                    {user?.prenom} {user?.nom}
+                  </p>
                   <p className="text-gray-500 capitalize">{user?.role}</p>
                 </div>
+                <button
+                  onClick={handleLogout}
+                  className="text-gray-400 hover:text-gray-600 transition-colors duration-200 p-1"
+                  title="Se déconnecter"
+                >
+                  <LogOut className="h-4 w-4" />
+                </button>
               </div>
             </div>
           </div>

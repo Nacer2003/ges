@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { collection, getDocs, query, orderBy, where } from 'firebase/firestore';
-import { Calendar, Clock, MapPin, User, Filter, Download, AlertCircle, Coffee, LogOut, LogIn } from 'lucide-react';
+import { Calendar, Clock, MapPin, User, Filter, Download, AlertCircle, Coffee, LogOut, LogIn, FileText } from 'lucide-react';
 import { db } from '../../config/firebase';
 import { Presence, User as UserType, Magasin } from '../../types';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
 import toast from 'react-hot-toast';
 
 export const PresencesPage: React.FC = () => {
@@ -80,18 +82,36 @@ export const PresencesPage: React.FC = () => {
   };
 
   const exportToCSV = () => {
-    const headers = ['Date', 'Utilisateur', 'Magasin', 'Arrivée', 'Départ', 'Début Pause', 'Fin Pause', 'Durée Pause'];
+    const headers = [
+      'Date',
+      'Prénom',
+      'Nom', 
+      'Email',
+      'Magasin',
+      'Arrivée',
+      'Départ',
+      'Début Pause',
+      'Fin Pause',
+      'Durée Pause (min)',
+      'Temps de Travail (h)'
+    ];
+    
     const csvData = presences.map(presence => {
       const user = users.find(u => u.id === presence.user_id);
+      const tempsTrail = calculateWorkTime(presence);
+      
       return [
         presence.date_pointage.toLocaleDateString('fr-FR'),
+        user?.prenom || '',
+        user?.nom || '',
         user?.email || 'Utilisateur supprimé',
         presence.magasin_nom || 'Magasin inconnu',
-        presence.heure_entree?.toLocaleTimeString('fr-FR') || '-',
-        presence.heure_sortie?.toLocaleTimeString('fr-FR') || '-',
-        presence.pause_entree?.toLocaleTimeString('fr-FR') || '-',
-        presence.pause_sortie?.toLocaleTimeString('fr-FR') || '-',
-        presence.duree_pause ? `${Math.floor(presence.duree_pause / 60)}h ${presence.duree_pause % 60}min` : '-'
+        presence.heure_entree?.toLocaleTimeString('fr-FR') || '',
+        presence.heure_sortie?.toLocaleTimeString('fr-FR') || '',
+        presence.pause_entree?.toLocaleTimeString('fr-FR') || '',
+        presence.pause_sortie?.toLocaleTimeString('fr-FR') || '',
+        presence.duree_pause || '',
+        tempsTrail
       ];
     });
 
@@ -99,7 +119,7 @@ export const PresencesPage: React.FC = () => {
       .map(row => row.map(field => `"${field}"`).join(','))
       .join('\n');
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
     link.setAttribute('href', url);
@@ -108,6 +128,104 @@ export const PresencesPage: React.FC = () => {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    
+    toast.success('Export CSV généré avec succès');
+  };
+
+  const calculateWorkTime = (presence: Presence): string => {
+    if (!presence.heure_entree || !presence.heure_sortie) return '';
+    
+    const entree = presence.heure_entree.getTime();
+    const sortie = presence.heure_sortie.getTime();
+    const pauseDuree = presence.duree_pause || 0;
+    
+    const tempsTotal = (sortie - entree) / (1000 * 60); // en minutes
+    const tempsTravail = tempsTotal - pauseDuree;
+    
+    const heures = Math.floor(tempsTravail / 60);
+    const minutes = Math.round(tempsTravail % 60);
+    
+    return `${heures}h${minutes.toString().padStart(2, '0')}`;
+  };
+
+  const exportToPDF = () => {
+    const doc = new jsPDF();
+    
+    // Titre
+    doc.setFontSize(20);
+    doc.text('Rapport de Présences', 20, 20);
+    
+    // Informations du rapport
+    doc.setFontSize(12);
+    doc.text(`Date: ${selectedDate ? new Date(selectedDate).toLocaleDateString('fr-FR') : 'Toutes les dates'}`, 20, 35);
+    doc.text(`Utilisateur: ${selectedUser ? users.find(u => u.id === selectedUser)?.email || 'Inconnu' : 'Tous les utilisateurs'}`, 20, 45);
+    doc.text(`Généré le: ${new Date().toLocaleDateString('fr-FR')} à ${new Date().toLocaleTimeString('fr-FR')}`, 20, 55);
+    
+    // Données du tableau
+    const tableData = presences.map(presence => {
+      const user = users.find(u => u.id === presence.user_id);
+      const tempsTrail = calculateWorkTime(presence);
+      
+      return [
+        presence.date_pointage.toLocaleDateString('fr-FR'),
+        `${user?.prenom || ''} ${user?.nom || ''}`.trim() || 'Utilisateur supprimé',
+        presence.magasin_nom || 'Magasin inconnu',
+        presence.heure_entree?.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) || '-',
+        presence.heure_sortie?.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) || '-',
+        presence.pause_entree?.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) || '-',
+        presence.duree_pause ? `${Math.floor(presence.duree_pause / 60)}h${(presence.duree_pause % 60).toString().padStart(2, '0')}` : '-',
+        tempsTrail || '-'
+      ];
+    });
+
+    // Configuration du tableau
+    (doc as any).autoTable({
+      head: [['Date', 'Employé', 'Magasin', 'Arrivée', 'Départ', 'Début Pause', 'Durée Pause', 'Temps Travail']],
+      body: tableData,
+      startY: 70,
+      styles: {
+        fontSize: 8,
+        cellPadding: 3,
+      },
+      headStyles: {
+        fillColor: [59, 130, 246],
+        textColor: 255,
+        fontStyle: 'bold'
+      },
+      alternateRowStyles: {
+        fillColor: [248, 250, 252]
+      },
+      columnStyles: {
+        0: { cellWidth: 20 }, // Date
+        1: { cellWidth: 35 }, // Employé
+        2: { cellWidth: 30 }, // Magasin
+        3: { cellWidth: 20 }, // Arrivée
+        4: { cellWidth: 20 }, // Départ
+        5: { cellWidth: 20 }, // Début Pause
+        6: { cellWidth: 20 }, // Durée Pause
+        7: { cellWidth: 25 }  // Temps Travail
+      }
+    });
+
+    // Statistiques en bas
+    const finalY = (doc as any).lastAutoTable.finalY + 20;
+    doc.setFontSize(14);
+    doc.text('Statistiques:', 20, finalY);
+    
+    doc.setFontSize(10);
+    const employesPresents = new Set(presences.map(p => p.user_id)).size;
+    const arrivees = presences.filter(p => p.heure_entree).length;
+    const departs = presences.filter(p => p.heure_sortie).length;
+    const pauses = presences.filter(p => p.pause_entree).length;
+    
+    doc.text(`• Employés présents: ${employesPresents}`, 20, finalY + 15);
+    doc.text(`• Arrivées enregistrées: ${arrivees}`, 20, finalY + 25);
+    doc.text(`• Départs enregistrés: ${departs}`, 20, finalY + 35);
+    doc.text(`• Pauses prises: ${pauses}`, 20, finalY + 45);
+
+    // Sauvegarder le PDF
+    doc.save(`rapport_presences_${selectedDate}.pdf`);
+    toast.success('Rapport PDF généré avec succès');
   };
 
   const formatDuration = (minutes: number) => {
@@ -124,14 +242,24 @@ export const PresencesPage: React.FC = () => {
           <h1 className="text-3xl font-bold text-gray-900">Gestion des Présences</h1>
           <p className="text-gray-600 mt-1">Consultez l'historique des pointages</p>
         </div>
-        <button
-          onClick={exportToCSV}
-          disabled={presences.length === 0}
-          className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 flex items-center space-x-2"
-        >
-          <Download className="h-5 w-5" />
-          <span>Exporter CSV</span>
-        </button>
+        <div className="flex space-x-3">
+          <button
+            onClick={exportToCSV}
+            disabled={presences.length === 0}
+            className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 flex items-center space-x-2"
+          >
+            <Download className="h-5 w-5" />
+            <span>Export CSV</span>
+          </button>
+          <button
+            onClick={exportToPDF}
+            disabled={presences.length === 0}
+            className="bg-red-600 text-white px-6 py-3 rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 flex items-center space-x-2"
+          >
+            <FileText className="h-5 w-5" />
+            <span>Export PDF</span>
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -166,7 +294,7 @@ export const PresencesPage: React.FC = () => {
               <option value="">Tous les utilisateurs</option>
               {users.filter(user => user.role === 'employe').map((user) => (
                 <option key={user.id} value={user.id}>
-                  {user.email}
+                  {user.prenom} {user.nom} ({user.email})
                 </option>
               ))}
             </select>
@@ -206,11 +334,15 @@ export const PresencesPage: React.FC = () => {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Durée pause
                   </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Temps travail
+                  </th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {presences.map((presence) => {
                   const user = users.find(u => u.id === presence.user_id);
+                  const tempsTrail = calculateWorkTime(presence);
                   return (
                     <tr key={presence.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -224,13 +356,24 @@ export const PresencesPage: React.FC = () => {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
                           <div className="flex-shrink-0 h-8 w-8">
-                            <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center">
-                              <User className="h-4 w-4 text-blue-600" />
-                            </div>
+                            {user?.image_url ? (
+                              <img
+                                src={user.image_url}
+                                alt={`${user.prenom} ${user.nom}`}
+                                className="h-8 w-8 rounded-full object-cover"
+                              />
+                            ) : (
+                              <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center">
+                                <User className="h-4 w-4 text-blue-600" />
+                              </div>
+                            )}
                           </div>
                           <div className="ml-3">
                             <div className="text-sm font-medium text-gray-900">
-                              {user?.email || 'Utilisateur supprimé'}
+                              {user ? `${user.prenom} ${user.nom}` : 'Utilisateur supprimé'}
+                            </div>
+                            <div className="text-sm text-gray-500">
+                              {user?.email || 'Email inconnu'}
                             </div>
                           </div>
                         </div>
@@ -267,6 +410,9 @@ export const PresencesPage: React.FC = () => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-orange-600">
                         {presence.duree_pause ? formatDuration(presence.duree_pause) : '-'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-600">
+                        {tempsTrail || '-'}
                       </td>
                     </tr>
                   );

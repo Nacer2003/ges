@@ -5,6 +5,7 @@ export interface User {
   prenom: string;
   role: 'admin' | 'employe';
   magasin_id?: string;
+  image_url?: string;
   createdAt: Date;
 }
 
@@ -78,13 +79,13 @@ export interface Presence {
   id: string;
   user_id: string;
   magasin_id: string;
-  magasin_nom: string; // Stocker le nom du magasin au moment du pointage
+  magasin_nom: string;
   date_pointage: Date;
   heure_entree?: Date;
   heure_sortie?: Date;
   pause_entree?: Date;
   pause_sortie?: Date;
-  duree_pause?: number; // en minutes
+  duree_pause?: number;
   latitude: number;
   longitude: number;
   type: 'arrivee' | 'depart' | 'pause_entree' | 'pause_sortie';
