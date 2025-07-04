@@ -1,6 +1,8 @@
 export interface User {
   id: string;
   email: string;
+  nom: string;
+  prenom: string;
   role: 'admin' | 'employe';
   magasin_id?: string;
   createdAt: Date;
