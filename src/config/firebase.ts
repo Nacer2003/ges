@@ -5,13 +5,13 @@ import { getStorage, connectStorageEmulator } from 'firebase/storage';
 
 const firebaseConfig = {
   // Remplacez par votre configuration Firebase
-  apiKey: "AIzaSyDwZUC1pgmO8qsuclI0ITp2yHa85roDuzI",
-  authDomain: "gestion5.firebaseapp.com",
-  projectId: "gestion5",
-  storageBucket: "gestion5.firebasestorage.app",
-  messagingSenderId: "627001487527",
-  appId: "1:627001487527:web:bb131fac6c4e7f53912b82",
-  measurementId: "G-GZPCM3XLYH"
+  apiKey: "AIzaSyBLlPBfbdecYAd7OOtPf57ejXSQemi8YKc",
+  authDomain: "gestion6-2d32e.firebaseapp.com",
+  projectId: "gestion6-2d32e",
+  storageBucket: "gestion6-2d32e.firebasestorage.app",
+  messagingSenderId: "771435706086",
+  appId: "1:771435706086:web:db0907b6033875c5b0ad27",
+  measurementId: "G-W07421339X"
 };
 
 const app = initializeApp(firebaseConfig);
