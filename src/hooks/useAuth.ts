@@ -1,7 +1,5 @@
 import { useState, useEffect } from 'react';
-import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { auth, db } from '../config/firebase';
+import { apiRequest } from '../config/api';
 import { User } from '../types';
 
 export const useAuth = () => {
@@ -9,58 +7,32 @@ export const useAuth = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
-      if (firebaseUser) {
-        try {
-          const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
-          if (userDoc.exists()) {
-            const userData = userDoc.data();
-            setUser({
-              id: firebaseUser.uid,
-              email: firebaseUser.email!,
-              nom: userData.nom || '',
-              prenom: userData.prenom || '',
-              role: userData.role,
-              magasin_id: userData.magasin_id,
-              image_url: userData.image_url,
-              createdAt: userData.createdAt?.toDate() || new Date()
-            });
-          } else {
-            // Si le document n'existe pas, le créer avec un rôle par défaut
-            const newUserData = {
-              email: firebaseUser.email!,
-              nom: '',
-              prenom: '',
-              role: 'employe' as const,
-              magasin_id: null,
-              image_url: '',
-              createdAt: new Date()
-            };
-            
-            await setDoc(doc(db, 'users', firebaseUser.uid), newUserData);
-            
-            setUser({
-              id: firebaseUser.uid,
-              email: firebaseUser.email!,
-              nom: '',
-              prenom: '',
-              role: 'employe',
-              magasin_id: null,
-              image_url: '',
-              createdAt: new Date()
-            });
-          }
-        } catch (error) {
-          console.error('Erreur lors de la récupération des données utilisateur:', error);
-          setUser(null);
+    const checkAuth = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        if (token) {
+          const userData = await apiRequest('/api/auth/me/');
+          setUser({
+            id: userData.id.toString(),
+            email: userData.email,
+            nom: userData.last_name || '',
+            prenom: userData.first_name || '',
+            role: userData.role,
+            magasin_id: userData.store?.toString() || null,
+            image_url: userData.profile_image || '',
+            createdAt: new Date(userData.date_joined)
+          });
         }
-      } else {
+      } catch (error) {
+        console.error('Erreur lors de la vérification de l\'authentification:', error);
+        localStorage.removeItem('token');
         setUser(null);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
-    });
+    };
 
-    return () => unsubscribe();
+    checkAuth();
   }, []);
 
   return { user, loading };

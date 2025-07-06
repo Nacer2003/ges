@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { collection, query, onSnapshot, orderBy, limit, getDocs } from 'firebase/firestore';
 import { Bell, Package, TrendingUp, TrendingDown, X, User as UserIcon } from 'lucide-react';
-import { db } from '../config/firebase';
 import { useAuth } from '../hooks/useAuth';
+import { stockService, productsService, storesService, authService } from '../services/api';
 import { Mouvement, Produit, Magasin, User } from '../types';
 
 interface Notification {
@@ -42,63 +41,58 @@ export const NotificationWidget: React.FC = () => {
   useEffect(() => {
     if (!user || user.role !== 'admin') return;
 
-    const fetchStaticData = async () => {
+    const fetchData = async () => {
       try {
-        const [produitsSnapshot, magasinsSnapshot, usersSnapshot] = await Promise.all([
-          getDocs(collection(db, 'produits')),
-          getDocs(collection(db, 'magasins')),
-          getDocs(collection(db, 'users'))
+        const [produitsData, magasinsData, usersData, mouvementsData] = await Promise.all([
+          productsService.getProducts(),
+          storesService.getStores(),
+          authService.getUsers(),
+          stockService.getMovements()
         ]);
 
-        setProduits(produitsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Produit[]);
-        setMagasins(magasinsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Magasin[]);
-        setUsers(usersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as User[]);
+        setProduits(produitsData.map((item: any) => ({ ...item, createdAt: new Date(item.created_at) })) as Produit[]);
+        setMagasins(magasinsData.map((item: any) => ({ ...item, createdAt: new Date(item.created_at) })) as Magasin[]);
+        setUsers(usersData.map((item: any) => ({ ...item, createdAt: new Date(item.date_joined) })) as User[]);
+
+        // Traiter les mouvements récents
+        const newNotifications: Notification[] = [];
+        const recentMovements = mouvementsData
+          .map((item: any) => ({ ...item, date: new Date(item.date) }))
+          .sort((a: any, b: any) => b.date.getTime() - a.date.getTime())
+          .slice(0, 20);
+
+        recentMovements.forEach((mouvement: any) => {
+          const produit = produitsData.find((p: any) => p.id === mouvement.product);
+          const magasin = magasinsData.find((m: any) => m.id === mouvement.store);
+          const userMouvement = usersData.find((u: any) => u.id === mouvement.user);
+
+          if (produit && magasin && userMouvement) {
+            newNotifications.push({
+              id: mouvement.id.toString(),
+              type: 'stock_movement',
+              title: `Mouvement de stock - ${produit.name}`,
+              message: `${mouvement.movement_type === 'in' ? 'Entrée' : 'Sortie'} de ${mouvement.quantity} unités dans ${magasin.name} (${mouvement.reason})`,
+              timestamp: mouvement.date,
+              read: false,
+              user_name: `${userMouvement.first_name} ${userMouvement.last_name}`
+            });
+          }
+        });
+
+        setNotifications(newNotifications.slice(0, 10));
+        setUnreadCount(newNotifications.length);
       } catch (error) {
         console.error('Erreur lors du chargement des données:', error);
       }
     };
 
-    fetchStaticData();
+    fetchData();
 
-    // Écouter les mouvements de stock récents
-    const mouvementsQuery = query(
-      collection(db, 'mouvements'),
-      orderBy('date', 'desc'),
-      limit(20)
-    );
+    // Polling pour les nouvelles notifications
+    const interval = setInterval(fetchData, 30000); // Toutes les 30 secondes
 
-    const unsubscribe = onSnapshot(mouvementsQuery, (snapshot) => {
-      const newNotifications: Notification[] = [];
-
-      snapshot.docs.forEach(doc => {
-        const mouvement = { id: doc.id, ...doc.data(), date: doc.data().date.toDate() } as Mouvement;
-        
-        // Récupérer les détails du produit, magasin et utilisateur
-        const produit = produits.find(p => p.id === mouvement.produit_id);
-        const magasin = magasins.find(m => m.id === mouvement.magasin_id);
-        const userMouvement = users.find(u => u.id === mouvement.user_id);
-
-        if (produit && magasin && userMouvement) {
-          newNotifications.push({
-            id: mouvement.id,
-            type: 'stock_movement',
-            title: `Mouvement de stock - ${produit.nom}`,
-            message: `${mouvement.type === 'entrée' ? 'Entrée' : 'Sortie'} de ${mouvement.quantite} unités dans ${magasin.nom} (${mouvement.motif})`,
-            timestamp: mouvement.date,
-            read: false,
-            user_name: `${userMouvement.prenom} ${userMouvement.nom}`
-          });
-        }
-      });
-
-      // Trier par date décroissante et garder les 10 plus récents
-      newNotifications.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
-      setNotifications(newNotifications.slice(0, 10));
-      setUnreadCount(newNotifications.length);
-    });
-
-    return () => unsubscribe();
-  }, [user, produits, magasins, users]);
+    return () => clearInterval(interval);
+  }, [user]);
 
   const markAsRead = (notificationId: string) => {
     setNotifications(prev => 

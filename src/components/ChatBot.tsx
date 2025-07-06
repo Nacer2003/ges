@@ -1,8 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { collection, getDocs } from 'firebase/firestore';
 import { Send, Bot, User } from 'lucide-react';
-import { db } from '../config/firebase';
 import { useAuth } from '../hooks/useAuth';
+import { productsService, storesService, authService, stockService } from '../services/api';
 import { Produit, Magasin, Stock, User as UserType } from '../types';
 
 interface ChatMessage {
@@ -42,18 +41,18 @@ export const ChatBot: React.FC = () => {
 
   const fetchAppData = async () => {
     try {
-      const [produitsSnapshot, magasinsSnapshot, stocksSnapshot, usersSnapshot] = await Promise.all([
-        getDocs(collection(db, 'produits')),
-        getDocs(collection(db, 'magasins')),
-        getDocs(collection(db, 'stocks')),
-        getDocs(collection(db, 'users'))
+      const [produitsData, magasinsData, stocksData, usersData] = await Promise.all([
+        productsService.getProducts(),
+        storesService.getStores(),
+        stockService.getStocks(),
+        authService.getUsers()
       ]);
 
       setAppData({
-        produits: produitsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Produit[],
-        magasins: magasinsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Magasin[],
-        stocks: stocksSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Stock[],
-        users: usersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as UserType[]
+        produits: produitsData.map((item: any) => ({ ...item, createdAt: new Date(item.created_at) })) as Produit[],
+        magasins: magasinsData.map((item: any) => ({ ...item, createdAt: new Date(item.created_at) })) as Magasin[],
+        stocks: stocksData.map((item: any) => ({ ...item, updatedAt: new Date(item.updated_at) })) as Stock[],
+        users: usersData.map((item: any) => ({ ...item, createdAt: new Date(item.date_joined) })) as UserType[]
       });
     } catch (error) {
       console.error('Erreur lors du chargement des données:', error);

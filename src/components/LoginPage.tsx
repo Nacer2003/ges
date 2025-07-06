@@ -1,10 +1,8 @@
 import React, { useState } from 'react';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 import { Package, Eye, EyeOff, Mail, Lock } from 'lucide-react';
-import { auth, db } from '../config/firebase';
 import { useAuth } from '../hooks/useAuth';
+import { authService } from '../services/api';
 
 export const LoginPage: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -31,18 +29,14 @@ export const LoginPage: React.FC = () => {
     setError('');
 
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      const userDoc = await getDoc(doc(db, 'users', userCredential.user.uid));
+      const response = await authService.login(email, password);
+      localStorage.setItem('token', response.access);
       
-      if (userDoc.exists()) {
-        const userData = userDoc.data();
-        if (userData.role === 'admin') {
-          navigate('/admin/dashboard');
-        } else {
-          navigate('/employe/dashboard');
-        }
+      // Redirect based on user role
+      if (response.user.role === 'admin') {
+        navigate('/admin/dashboard');
       } else {
-        setError('Profil utilisateur non trouvé');
+        navigate('/employe/dashboard');
       }
     } catch (error: any) {
       setError('Email ou mot de passe incorrect');

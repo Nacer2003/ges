@@ -41,7 +41,7 @@ export const AdminDashboard: React.FC = () => {
 
       const utilisateurs = utilisateursData.map((item: any) => ({
         ...item,
-        createdAt: new Date(item.created_at)
+        createdAt: new Date(item.date_joined)
       })) as User[];
 
       const stocks = stocksData.map((item: any) => ({

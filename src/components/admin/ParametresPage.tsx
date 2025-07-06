@@ -31,7 +31,7 @@ export const ParametresPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState('general');
 
   const handleSave = () => {
-    // Ici vous pourriez sauvegarder les paramètres dans Firestore
+    // Ici vous pourriez sauvegarder les paramètres dans la base de données
     toast.success('Paramètres sauvegardés avec succès');
   };
 
@@ -332,7 +332,7 @@ export const ParametresPage: React.FC = () => {
               <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                 <h4 className="text-sm font-medium text-yellow-800 mb-2">Information importante</h4>
                 <p className="text-sm text-yellow-700">
-                  Les sauvegardes sont automatiquement gérées par Firebase. Ces paramètres sont informatifs et peuvent être utilisés pour des sauvegardes supplémentaires.
+                  Les sauvegardes sont automatiquement gérées par le système. Ces paramètres sont informatifs et peuvent être utilisés pour des sauvegardes supplémentaires.
                 </p>
               </div>
             </div>
