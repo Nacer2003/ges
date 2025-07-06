@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, where } from 'firebase/firestore';
 import { Plus, Edit, Trash2, Search, Package, AlertTriangle, Save, X } from 'lucide-react';
-import { db } from '../../config/firebase';
+import { stockService, productsService, storesService } from '../../services/api';
 import { Stock, Produit, Magasin } from '../../types';
 import toast from 'react-hot-toast';
 
@@ -15,8 +14,8 @@ export const StockManagementPage: React.FC = () => {
   const [showModal, setShowModal] = useState(false);
   const [editingStock, setEditingStock] = useState<Stock | null>(null);
   const [formData, setFormData] = useState({
-    produit_id: '',
-    magasin_id: '',
+    produit: '',
+    magasin: '',
     quantite: 0
   });
 
@@ -27,32 +26,25 @@ export const StockManagementPage: React.FC = () => {
   const fetchData = async () => {
     try {
       // Récupérer les stocks
-      const stocksSnapshot = await getDocs(collection(db, 'stocks'));
-      const stocksData = stocksSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        updatedAt: doc.data().updatedAt?.toDate() || new Date()
-      })) as Stock[];
+      const stocksData = await stockService.getStocks();
+      setStocks(stocksData.map((item: any) => ({
+        ...item,
+        updatedAt: new Date(item.updated_at)
+      })));
 
       // Récupérer les produits
-      const produitsSnapshot = await getDocs(collection(db, 'produits'));
-      const produitsData = produitsSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt?.toDate() || new Date()
-      })) as Produit[];
+      const produitsData = await productsService.getProducts();
+      setProduits(produitsData.map((item: any) => ({
+        ...item,
+        createdAt: new Date(item.created_at)
+      })));
 
       // Récupérer les magasins
-      const magasinsSnapshot = await getDocs(collection(db, 'magasins'));
-      const magasinsData = magasinsSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt?.toDate() || new Date()
-      })) as Magasin[];
-
-      setStocks(stocksData);
-      setProduits(produitsData);
-      setMagasins(magasinsData);
+      const magasinsData = await storesService.getStores();
+      setMagasins(magasinsData.map((item: any) => ({
+        ...item,
+        createdAt: new Date(item.created_at)
+      })));
     } catch (error) {
       toast.error('Erreur lors du chargement des données');
     } finally {
@@ -66,17 +58,18 @@ export const StockManagementPage: React.FC = () => {
 
     try {
       const stockData = {
-        ...formData,
-        updatedAt: new Date()
+        produit: formData.produit,
+        magasin: formData.magasin,
+        quantite: formData.quantite
       };
 
       if (editingStock) {
-        await updateDoc(doc(db, 'stocks', editingStock.id), stockData);
+        await stockService.updateStock(editingStock.id, stockData);
         toast.success('Stock modifié avec succès');
       } else {
         // Vérifier si le stock existe déjà pour ce produit et magasin
         const existingStock = stocks.find(s => 
-          s.produit_id === formData.produit_id && s.magasin_id === formData.magasin_id
+          s.produit_id === formData.produit && s.magasin_id === formData.magasin
         );
         
         if (existingStock) {
@@ -84,7 +77,7 @@ export const StockManagementPage: React.FC = () => {
           return;
         }
 
-        await addDoc(collection(db, 'stocks'), stockData);
+        await stockService.createStock(stockData);
         toast.success('Stock ajouté avec succès');
       }
 
@@ -100,8 +93,8 @@ export const StockManagementPage: React.FC = () => {
   const handleEdit = (stock: Stock) => {
     setEditingStock(stock);
     setFormData({
-      produit_id: stock.produit_id,
-      magasin_id: stock.magasin_id,
+      produit: stock.produit_id,
+      magasin: stock.magasin_id,
       quantite: stock.quantite
     });
     setShowModal(true);
@@ -111,7 +104,7 @@ export const StockManagementPage: React.FC = () => {
     if (!confirm('Êtes-vous sûr de vouloir supprimer ce stock ?')) return;
 
     try {
-      await deleteDoc(doc(db, 'stocks', stock.id));
+      await stockService.deleteStock(stock.id);
       toast.success('Stock supprimé avec succès');
       fetchData();
     } catch (error) {
@@ -121,8 +114,8 @@ export const StockManagementPage: React.FC = () => {
 
   const resetForm = () => {
     setFormData({
-      produit_id: '',
-      magasin_id: '',
+      produit: '',
+      magasin: '',
       quantite: 0
     });
     setEditingStock(null);
@@ -238,7 +231,7 @@ export const StockManagementPage: React.FC = () => {
                         <div className="flex-shrink-0 h-10 w-10">
                           {produit.image_url ? (
                             <img
-                              src={produit.image_url}
+                              src={`http://localhost:8000${produit.image_url}`}
                               alt={produit.nom}
                               className="h-10 w-10 rounded-lg object-cover"
                             />
@@ -336,8 +329,8 @@ export const StockManagementPage: React.FC = () => {
                   <select
                     required
                     disabled={!!editingStock}
-                    value={formData.produit_id}
-                    onChange={(e) => setFormData({ ...formData, produit_id: e.target.value })}
+                    value={formData.produit}
+                    onChange={(e) => setFormData({ ...formData, produit: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
                   >
                     <option value="">Sélectionner un produit</option>
@@ -356,8 +349,8 @@ export const StockManagementPage: React.FC = () => {
                   <select
                     required
                     disabled={!!editingStock}
-                    value={formData.magasin_id}
-                    onChange={(e) => setFormData({ ...formData, magasin_id: e.target.value })}
+                    value={formData.magasin}
+                    onChange={(e) => setFormData({ ...formData, magasin: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
                   >
                     <option value="">Sélectionner un magasin</option>

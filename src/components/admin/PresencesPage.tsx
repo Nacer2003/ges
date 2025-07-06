@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { collection, getDocs, query, orderBy, where } from 'firebase/firestore';
 import { Calendar, Clock, MapPin, User, Filter, Download, AlertCircle, Coffee, LogOut, LogIn, FileText } from 'lucide-react';
-import { db } from '../../config/firebase';
+import { attendanceService, authService, storesService } from '../../services/api';
 import { Presence, User as UserType, Magasin } from '../../types';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
@@ -25,14 +24,11 @@ export const PresencesPage: React.FC = () => {
   const fetchData = async () => {
     try {
       // Récupérer les utilisateurs
-      const usersSnapshot = await getDocs(collection(db, 'users'));
-      const usersData = usersSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt?.toDate() || new Date()
-      })) as UserType[];
-      setUsers(usersData);
-
+      const usersData = await authService.getUsers();
+      setUsers(usersData.map((item: any) => ({
+        ...item,
+        createdAt: new Date(item.date_joined)
+      })));
     } catch (error) {
       console.error('Erreur lors du chargement des données:', error);
       toast.error('Erreur lors du chargement des données');
@@ -42,20 +38,14 @@ export const PresencesPage: React.FC = () => {
   const fetchPresences = async () => {
     setLoading(true);
     try {
-      let presencesQuery = query(
-        collection(db, 'presences'),
-        orderBy('date_pointage', 'desc')
-      );
-
-      const snapshot = await getDocs(presencesQuery);
-      let presencesData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        date_pointage: doc.data().date_pointage.toDate(),
-        heure_entree: doc.data().heure_entree?.toDate(),
-        heure_sortie: doc.data().heure_sortie?.toDate(),
-        pause_entree: doc.data().pause_entree?.toDate(),
-        pause_sortie: doc.data().pause_sortie?.toDate()
+      const data = await attendanceService.getAttendance();
+      let presencesData = data.map((item: any) => ({
+        ...item,
+        date_pointage: new Date(item.date_pointage),
+        heure_entree: item.heure_entree ? new Date(item.heure_entree) : null,
+        heure_sortie: item.heure_sortie ? new Date(item.heure_sortie) : null,
+        pause_entree: item.pause_entree ? new Date(item.pause_entree) : null,
+        pause_sortie: item.pause_sortie ? new Date(item.pause_sortie) : null
       })) as Presence[];
 
       // Filtrer par date
@@ -358,7 +348,7 @@ export const PresencesPage: React.FC = () => {
                           <div className="flex-shrink-0 h-8 w-8">
                             {user?.image_url ? (
                               <img
-                                src={user.image_url}
+                                src={`http://localhost:8000${user.image_url}`}
                                 alt={`${user.prenom} ${user.nom}`}
                                 className="h-8 w-8 rounded-full object-cover"
                               />

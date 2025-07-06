@@ -1,12 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { collection, getDocs, updateDoc, deleteDoc, doc, setDoc, query, where } from 'firebase/firestore';
-import { createUserWithEmailAndPassword, deleteUser, signInWithEmailAndPassword } from 'firebase/auth';
 import { Plus, Edit, Trash2, Search, Users, Shield, User, Save, X, AlertTriangle } from 'lucide-react';
-import { db, auth } from '../../config/firebase';
+import { authService, storesService } from '../../services/api';
 import { User as UserType, Magasin } from '../../types';
 import { useAuth } from '../../hooks/useAuth';
 import { ImageUpload } from '../ImageUpload';
-import { uploadToCloudinary } from '../../config/cloudinary';
 import toast from 'react-hot-toast';
 
 export const UtilisateursPage: React.FC = () => {
@@ -23,8 +20,8 @@ export const UtilisateursPage: React.FC = () => {
     prenom: '',
     password: '',
     role: 'employe' as 'admin' | 'employe',
-    magasin_id: '',
-    image_url: ''
+    magasin: '',
+    image: null as File | null
   });
 
   useEffect(() => {
@@ -34,13 +31,11 @@ export const UtilisateursPage: React.FC = () => {
 
   const fetchUsers = async () => {
     try {
-      const snapshot = await getDocs(collection(db, 'users'));
-      const usersData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt?.toDate() || new Date()
-      })) as UserType[];
-      setUsers(usersData);
+      const data = await authService.getUsers();
+      setUsers(data.map((item: any) => ({
+        ...item,
+        createdAt: new Date(item.date_joined)
+      })));
     } catch (error) {
       toast.error('Erreur lors du chargement des utilisateurs');
     } finally {
@@ -50,13 +45,11 @@ export const UtilisateursPage: React.FC = () => {
 
   const fetchMagasins = async () => {
     try {
-      const snapshot = await getDocs(collection(db, 'magasins'));
-      const magasinsData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt?.toDate() || new Date()
-      })) as Magasin[];
-      setMagasins(magasinsData);
+      const data = await storesService.getStores();
+      setMagasins(data.map((item: any) => ({
+        ...item,
+        createdAt: new Date(item.created_at)
+      })));
     } catch (error) {
       console.error('Erreur lors du chargement des magasins:', error);
     }
@@ -67,75 +60,44 @@ export const UtilisateursPage: React.FC = () => {
     setLoading(true);
 
     try {
-      // Upload de l'image si nécessaire
-      let imageUrl = formData.image_url;
-      if ((window as any).pendingImageFile) {
-        imageUrl = await uploadToCloudinary((window as any).pendingImageFile);
-        delete (window as any).pendingImageFile;
+      const userData = new FormData();
+      userData.append('email', formData.email);
+      userData.append('nom', formData.nom);
+      userData.append('prenom', formData.prenom);
+      userData.append('role', formData.role);
+      
+      if (formData.magasin) {
+        userData.append('magasin', formData.magasin);
+      }
+      
+      if (formData.image) {
+        userData.append('image', formData.image);
       }
 
       if (editingUser) {
         // Modification d'un utilisateur existant
-        const updateData: any = {
-          nom: formData.nom,
-          prenom: formData.prenom,
-          role: formData.role,
-          magasin_id: formData.magasin_id || null,
-          image_url: imageUrl
-        };
-
-        await updateDoc(doc(db, 'users', editingUser.id), updateData);
+        await authService.updateUser(editingUser.id, userData);
         toast.success('Utilisateur modifié avec succès');
       } else {
         // Création d'un nouvel utilisateur
-        try {
-          // Créer le nouvel utilisateur
-          const userCredential = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
-          
-          // Créer le document utilisateur
-          await setDoc(doc(db, 'users', userCredential.user.uid), {
-            email: formData.email,
-            nom: formData.nom,
-            prenom: formData.prenom,
-            role: formData.role,
-            magasin_id: formData.magasin_id || null,
-            image_url: imageUrl,
-            createdAt: new Date()
-          });
-          
-          // Reconnecter l'admin immédiatement
-          if (currentUser?.email) {
-            // Utiliser un délai pour éviter les conflits
-            setTimeout(async () => {
-              try {
-                const adminPassword = prompt('Entrez votre mot de passe admin pour vous reconnecter:');
-                if (adminPassword) {
-                  await signInWithEmailAndPassword(auth, currentUser.email, adminPassword);
-                }
-              } catch (error) {
-                console.error('Erreur de reconnexion admin:', error);
-              }
-            }, 100);
-          }
-          
-          toast.success('Utilisateur créé avec succès');
-        } catch (authError: any) {
-          if (authError.code === 'auth/email-already-in-use') {
-            toast.error('Cette adresse email est déjà utilisée');
-          } else if (authError.code === 'auth/weak-password') {
-            toast.error('Le mot de passe doit contenir au moins 6 caractères');
-          } else {
-            toast.error('Erreur lors de la création du compte: ' + authError.message);
-          }
+        if (!formData.password) {
+          toast.error('Le mot de passe est requis pour créer un utilisateur');
           return;
         }
+        
+        userData.append('password', formData.password);
+        await authService.createUser(userData);
+        toast.success('Utilisateur créé avec succès');
       }
 
       resetForm();
       fetchUsers();
     } catch (error: any) {
-      toast.error('Erreur lors de la sauvegarde');
-      console.error('Erreur:', error);
+      if (error.message.includes('email')) {
+        toast.error('Cette adresse email est déjà utilisée');
+      } else {
+        toast.error('Erreur lors de la sauvegarde');
+      }
     } finally {
       setLoading(false);
     }
@@ -149,31 +111,18 @@ export const UtilisateursPage: React.FC = () => {
       prenom: user.prenom || '',
       password: '',
       role: user.role,
-      magasin_id: user.magasin_id || '',
-      image_url: user.image_url || ''
+      magasin: user.magasin_id || '',
+      image: null
     });
     setShowModal(true);
   };
 
   const handleDelete = async (user: UserType) => {
-    if (!confirm('Êtes-vous sûr de vouloir supprimer cet utilisateur ? Cela supprimera aussi son historique de pointages et son compte d\'authentification.')) return;
+    if (!confirm('Êtes-vous sûr de vouloir supprimer cet utilisateur ?')) return;
 
     try {
-      // Supprimer l'utilisateur de Firestore
-      await deleteDoc(doc(db, 'users', user.id));
-      
-      // Supprimer l'historique des présences de cet utilisateur
-      const presencesQuery = query(collection(db, 'presences'), where('user_id', '==', user.id));
-      const presencesSnapshot = await getDocs(presencesQuery);
-      
-      const deletePromises = presencesSnapshot.docs.map(presenceDoc => 
-        deleteDoc(doc(db, 'presences', presenceDoc.id))
-      );
-      
-      await Promise.all(deletePromises);
-      
-      toast.success('Utilisateur et son historique supprimés avec succès');
-      toast.info('Note: Le compte d\'authentification Firebase doit être supprimé manuellement depuis la console Firebase');
+      await authService.deleteUser(user.id);
+      toast.success('Utilisateur supprimé avec succès');
       fetchUsers();
     } catch (error) {
       toast.error('Erreur lors de la suppression');
@@ -187,8 +136,8 @@ export const UtilisateursPage: React.FC = () => {
       prenom: '',
       password: '',
       role: 'employe',
-      magasin_id: '',
-      image_url: ''
+      magasin: '',
+      image: null
     });
     setEditingUser(null);
     setShowModal(false);
@@ -272,7 +221,7 @@ export const UtilisateursPage: React.FC = () => {
                         <div className="flex-shrink-0 h-10 w-10">
                           {user.image_url ? (
                             <img
-                              src={user.image_url}
+                              src={`http://localhost:8000${user.image_url}`}
                               alt={`${user.prenom} ${user.nom}`}
                               className="h-10 w-10 rounded-full object-cover"
                             />
@@ -375,8 +324,8 @@ export const UtilisateursPage: React.FC = () => {
 
               <form onSubmit={handleSubmit} className="space-y-6">
                 <ImageUpload
-                  currentImage={formData.image_url}
-                  onImageChange={(imageUrl) => setFormData({ ...formData, image_url: imageUrl })}
+                  currentImage={editingUser?.image_url ? `http://localhost:8000${editingUser.image_url}` : undefined}
+                  onImageChange={(file) => setFormData({ ...formData, image: file })}
                 />
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -471,8 +420,8 @@ export const UtilisateursPage: React.FC = () => {
                       Magasin assigné
                     </label>
                     <select
-                      value={formData.magasin_id}
-                      onChange={(e) => setFormData({ ...formData, magasin_id: e.target.value })}
+                      value={formData.magasin}
+                      onChange={(e) => setFormData({ ...formData, magasin: e.target.value })}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
                       <option value="">Aucun magasin assigné</option>

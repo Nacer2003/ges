@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { collection, getDocs, query, where, addDoc, updateDoc, doc } from 'firebase/firestore';
 import { Package, Search, Plus, Minus, AlertTriangle, Save } from 'lucide-react';
-import { db } from '../../config/firebase';
+import { stockService, productsService } from '../../services/api';
 import { useAuth } from '../../hooks/useAuth';
 import { Stock, Produit, Mouvement } from '../../types';
 import toast from 'react-hot-toast';
@@ -31,27 +30,23 @@ export const StockPage: React.FC = () => {
 
     try {
       // Récupérer les stocks du magasin
-      const stocksQuery = query(
-        collection(db, 'stocks'),
-        where('magasin_id', '==', user.magasin_id)
-      );
-      const stocksSnapshot = await getDocs(stocksQuery);
-      const stocksData = stocksSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        updatedAt: doc.data().updatedAt?.toDate() || new Date()
-      })) as Stock[];
+      const stocksData = await stockService.getStocks();
+      const userStocks = stocksData
+        .filter((stock: any) => stock.magasin.toString() === user.magasin_id)
+        .map((item: any) => ({
+          ...item,
+          updatedAt: new Date(item.updated_at)
+        })) as Stock[];
 
       // Récupérer tous les produits
-      const produitsSnapshot = await getDocs(collection(db, 'produits'));
-      const produitsData = produitsSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt?.toDate() || new Date()
+      const produitsData = await productsService.getProducts();
+      const produits = produitsData.map((item: any) => ({
+        ...item,
+        createdAt: new Date(item.created_at)
       })) as Produit[];
 
-      setStocks(stocksData);
-      setProduits(produitsData);
+      setStocks(userStocks);
+      setProduits(produits);
     } catch (error) {
       toast.error('Erreur lors du chargement du stock');
     } finally {
@@ -80,20 +75,12 @@ export const StockPage: React.FC = () => {
       }
 
       // Enregistrer le mouvement
-      await addDoc(collection(db, 'mouvements'), {
-        produit_id: selectedStock.produit_id,
-        magasin_id: selectedStock.magasin_id,
-        user_id: user.id,
+      await stockService.createMovement({
+        produit: selectedStock.produit_id,
+        magasin: selectedStock.magasin_id,
         type: mouvementData.type,
         quantite: mouvementData.quantite,
-        date: new Date(),
         motif: mouvementData.motif
-      });
-
-      // Mettre à jour le stock
-      await updateDoc(doc(db, 'stocks', selectedStock.id), {
-        quantite: nouvelleQuantite,
-        updatedAt: new Date()
       });
 
       toast.success('Mouvement enregistré avec succès');
@@ -182,7 +169,7 @@ export const StockPage: React.FC = () => {
               <div className="h-48 bg-gray-100 relative">
                 {produit.image_url ? (
                   <img
-                    src={produit.image_url}
+                    src={`http://localhost:8000${produit.image_url}`}
                     alt={produit.nom}
                     className="w-full h-full object-cover"
                   />

@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { collection, query, where, orderBy, onSnapshot, addDoc, updateDoc, doc, getDocs, or } from 'firebase/firestore';
 import { MessageCircle, Send, X, Users, Bell, Bot } from 'lucide-react';
-import { db } from '../config/firebase';
+import { messagingService, authService } from '../services/api';
 import { useAuth } from '../hooks/useAuth';
 import { Message, User } from '../types';
 import { ChatBot } from './ChatBot';
@@ -17,12 +16,15 @@ export const MessagingWidget: React.FC = () => {
   const [newMessage, setNewMessage] = useState('');
   const [unreadCount, setUnreadCount] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const [lastMessageCount, setLastMessageCount] = useState(0);
 
   useEffect(() => {
     if (user) {
       fetchUsers();
-      setupMessageListener();
+      fetchMessages();
+      
+      // Polling pour les nouveaux messages
+      const interval = setInterval(fetchMessages, 30000);
+      return () => clearInterval(interval);
     }
   }, [user]);
 
@@ -30,85 +32,56 @@ export const MessagingWidget: React.FC = () => {
     scrollToBottom();
   }, [messages]);
 
-  // Notification pour nouveaux messages
-  useEffect(() => {
-    if (messages.length > lastMessageCount && lastMessageCount > 0) {
-      const newMessages = messages.slice(lastMessageCount);
-      newMessages.forEach(msg => {
-        if (msg.receiver_id === user?.id && !msg.read) {
-          const sender = users.find(u => u.id === msg.sender_id);
-          toast.success(`Nouveau message de ${sender?.email || 'Utilisateur inconnu'}`, {
-            icon: '💬',
-            duration: 4000
-          });
-        }
-      });
-    }
-    setLastMessageCount(messages.length);
-  }, [messages, lastMessageCount, user, users]);
-
   const fetchUsers = async () => {
     try {
-      const usersSnapshot = await getDocs(collection(db, 'users'));
-      const usersData = usersSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt?.toDate() || new Date()
-      })) as User[];
+      const usersData = await authService.getUsers();
+      const filteredUsers = usersData
+        .filter((u: any) => u.id !== user?.id)
+        .map((item: any) => ({
+          ...item,
+          createdAt: new Date(item.date_joined)
+        }));
 
       if (user?.role === 'admin') {
-        setUsers(usersData.filter(u => u.role === 'employe'));
+        setUsers(filteredUsers.filter((u: any) => u.role === 'employe'));
       } else {
-        setUsers(usersData.filter(u => u.role === 'admin'));
+        setUsers(filteredUsers.filter((u: any) => u.role === 'admin'));
       }
     } catch (error) {
       console.error('Erreur lors du chargement des utilisateurs:', error);
     }
   };
 
-  const setupMessageListener = () => {
-    if (!user) return;
-
-    const messagesQuery = query(
-      collection(db, 'messages'),
-      or(
-        where('sender_id', '==', user.id),
-        where('receiver_id', '==', user.id)
-      ),
-      orderBy('timestamp', 'asc')
-    );
-
-    const unsubscribe = onSnapshot(messagesQuery, (snapshot) => {
-      const messagesData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        timestamp: doc.data().timestamp.toDate()
+  const fetchMessages = async () => {
+    try {
+      const messagesData = await messagingService.getMessages();
+      const formattedMessages = messagesData.map((item: any) => ({
+        ...item,
+        timestamp: new Date(item.timestamp)
       })) as Message[];
 
-      setMessages(messagesData);
+      setMessages(formattedMessages);
 
-      const unread = messagesData.filter(msg => 
-        msg.receiver_id === user.id && !msg.read
+      const unread = formattedMessages.filter(msg => 
+        msg.receiver_id === user?.id && !msg.read
       ).length;
       setUnreadCount(unread);
-    });
-
-    return unsubscribe;
+    } catch (error) {
+      console.error('Erreur lors du chargement des messages:', error);
+    }
   };
 
   const sendMessage = async () => {
     if (!newMessage.trim() || !selectedUser || !user) return;
 
     try {
-      await addDoc(collection(db, 'messages'), {
-        sender_id: user.id,
-        receiver_id: selectedUser.id,
-        content: newMessage.trim(),
-        timestamp: new Date(),
-        read: false
+      await messagingService.createMessage({
+        receiver: selectedUser.id,
+        content: newMessage.trim()
       });
 
       setNewMessage('');
+      fetchMessages();
     } catch (error) {
       toast.error('Erreur lors de l\'envoi du message');
     }
@@ -116,9 +89,8 @@ export const MessagingWidget: React.FC = () => {
 
   const markAsRead = async (messageId: string) => {
     try {
-      await updateDoc(doc(db, 'messages', messageId), {
-        read: true
-      });
+      await messagingService.updateMessage(messageId, { read: true });
+      fetchMessages();
     } catch (error) {
       console.error('Erreur lors du marquage comme lu:', error);
     }

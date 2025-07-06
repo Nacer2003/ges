@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { collection, getDocs, addDoc, query, where, orderBy, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { MapPin, Clock, CheckCircle, AlertCircle, Calendar, Coffee, LogOut, LogIn, Pause } from 'lucide-react';
-import { db } from '../../config/firebase';
+import { attendanceService, storesService } from '../../services/api';
 import { useAuth } from '../../hooks/useAuth';
 import { useGeolocation } from '../../hooks/useGeolocation';
 import { Presence, Magasin } from '../../types';
@@ -30,39 +29,35 @@ export const PointagePage: React.FC = () => {
 
     try {
       // Récupérer le magasin
-      const magasinDoc = await getDoc(doc(db, 'magasins', user.magasin_id));
+      const magasinsData = await storesService.getStores();
+      const userMagasin = magasinsData.find((m: any) => m.id.toString() === user.magasin_id);
       
-      if (magasinDoc.exists()) {
+      if (userMagasin) {
         setMagasin({
-          id: magasinDoc.id,
-          ...magasinDoc.data(),
-          createdAt: magasinDoc.data().createdAt?.toDate() || new Date()
-        } as Magasin);
+          ...userMagasin,
+          createdAt: new Date(userMagasin.created_at)
+        });
       }
 
       // Récupérer l'historique des présences
-      const presencesQuery = query(
-        collection(db, 'presences'),
-        where('user_id', '==', user.id),
-        orderBy('date_pointage', 'desc')
-      );
-      
-      const presencesSnapshot = await getDocs(presencesQuery);
-      const presencesData = presencesSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        date_pointage: doc.data().date_pointage.toDate(),
-        heure_entree: doc.data().heure_entree?.toDate(),
-        heure_sortie: doc.data().heure_sortie?.toDate(),
-        pause_entree: doc.data().pause_entree?.toDate(),
-        pause_sortie: doc.data().pause_sortie?.toDate()
-      })) as Presence[];
+      const presencesData = await attendanceService.getAttendance();
+      const userPresences = presencesData
+        .filter((p: any) => p.user.toString() === user.id)
+        .map((item: any) => ({
+          ...item,
+          date_pointage: new Date(item.date_pointage),
+          heure_entree: item.heure_entree ? new Date(item.heure_entree) : null,
+          heure_sortie: item.heure_sortie ? new Date(item.heure_sortie) : null,
+          pause_entree: item.pause_entree ? new Date(item.pause_entree) : null,
+          pause_sortie: item.pause_sortie ? new Date(item.pause_sortie) : null
+        }))
+        .sort((a: any, b: any) => b.date_pointage.getTime() - a.date_pointage.getTime()) as Presence[];
 
-      setPresences(presencesData);
+      setPresences(userPresences);
 
       // Vérifier le statut actuel
       const today = new Date();
-      const todayPresenceData = presencesData.find(p => {
+      const todayPresenceData = userPresences.find(p => {
         const pointageDate = p.date_pointage;
         return pointageDate.toDateString() === today.toDateString();
       });
@@ -149,12 +144,11 @@ export const PointagePage: React.FC = () => {
 
       if (type === 'arrivee') {
         // Nouveau pointage d'arrivée
-        await addDoc(collection(db, 'presences'), {
-          user_id: user.id,
-          magasin_id: magasin.id,
+        await attendanceService.createAttendance({
+          magasin: magasin.id,
           magasin_nom: magasin.nom,
-          date_pointage: now,
-          heure_entree: now,
+          date_pointage: now.toISOString(),
+          heure_entree: now.toISOString(),
           latitude: position.latitude,
           longitude: position.longitude,
           type: 'arrivee'
@@ -165,13 +159,13 @@ export const PointagePage: React.FC = () => {
         const updateData: any = {};
         
         if (type === 'depart') {
-          updateData.heure_sortie = now;
+          updateData.heure_sortie = now.toISOString();
           updateData.type = 'depart';
         } else if (type === 'pause_entree') {
-          updateData.pause_entree = now;
+          updateData.pause_entree = now.toISOString();
           updateData.type = 'pause_entree';
         } else if (type === 'pause_sortie') {
-          updateData.pause_sortie = now;
+          updateData.pause_sortie = now.toISOString();
           updateData.type = 'pause_sortie';
           
           // Calculer la durée de pause
@@ -181,7 +175,7 @@ export const PointagePage: React.FC = () => {
           }
         }
 
-        await updateDoc(doc(db, 'presences', todayPresence.id), updateData);
+        await attendanceService.updateAttendance(todayPresence.id, updateData);
         
         const messages = {
           depart: 'Départ enregistré avec succès !',

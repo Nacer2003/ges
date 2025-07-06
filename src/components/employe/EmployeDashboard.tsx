@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, getDocs, where, addDoc, doc, getDoc } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 import { MapPin, Clock, Package, AlertCircle } from 'lucide-react';
-import { db } from '../../config/firebase';
+import { stockService, productsService, storesService, attendanceService } from '../../services/api';
 import { useAuth } from '../../hooks/useAuth';
 import { useGeolocation } from '../../hooks/useGeolocation';
 import { Stock, Produit, Magasin, Presence } from '../../types';
@@ -26,27 +25,29 @@ export const EmployeDashboard: React.FC = () => {
 
       try {
         // Récupérer le magasin de l'employé
-        const magasinDoc = await getDoc(doc(db, 'magasins', user.magasin_id));
-        if (magasinDoc.exists()) {
-          setMagasin({ id: magasinDoc.id, ...magasinDoc.data() } as Magasin);
+        const magasinsData = await storesService.getStores();
+        const userMagasin = magasinsData.find((m: any) => m.id.toString() === user.magasin_id);
+        if (userMagasin) {
+          setMagasin({
+            ...userMagasin,
+            createdAt: new Date(userMagasin.created_at)
+          });
         }
 
         // Récupérer les stocks du magasin
-        const stocksQuery = query(
-          collection(db, 'stocks'),
-          where('magasin_id', '==', user.magasin_id)
-        );
-        const stocksSnapshot = await getDocs(stocksQuery);
-        const stocks = stocksSnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        })) as Stock[];
+        const stocksData = await stockService.getStocks();
+        const stocks = stocksData
+          .filter((stock: any) => stock.magasin.toString() === user.magasin_id)
+          .map((item: any) => ({
+            ...item,
+            updatedAt: new Date(item.updated_at)
+          })) as Stock[];
 
         // Récupérer les produits pour vérifier les alertes
-        const produitsSnapshot = await getDocs(collection(db, 'produits'));
-        const produits = produitsSnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
+        const produitsData = await productsService.getProducts();
+        const produits = produitsData.map((item: any) => ({
+          ...item,
+          createdAt: new Date(item.created_at)
         })) as Produit[];
 
         let produitsAlertes = 0;
@@ -63,16 +64,13 @@ export const EmployeDashboard: React.FC = () => {
         });
 
         // Récupérer le dernier pointage du jour
-        const presencesQuery = query(
-          collection(db, 'presences'),
-          where('user_id', '==', user.id)
-        );
-        const presencesSnapshot = await getDocs(presencesQuery);
-        const presences = presencesSnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data(),
-          date_pointage: doc.data().date_pointage.toDate()
-        })) as Presence[];
+        const presencesData = await attendanceService.getAttendance();
+        const presences = presencesData
+          .filter((p: any) => p.user.toString() === user.id)
+          .map((item: any) => ({
+            ...item,
+            date_pointage: new Date(item.date_pointage)
+          })) as Presence[];
 
         const today = new Date();
         const todayPresence = presences.find(p => {
@@ -118,10 +116,10 @@ export const EmployeDashboard: React.FC = () => {
         return;
       }
 
-      await addDoc(collection(db, 'presences'), {
-        user_id: user.id,
-        magasin_id: magasin.id,
-        date_pointage: new Date(),
+      await attendanceService.createAttendance({
+        magasin: magasin.id,
+        magasin_nom: magasin.nom,
+        date_pointage: new Date().toISOString(),
         latitude: position.latitude,
         longitude: position.longitude,
         type: 'arrivee'
@@ -132,6 +130,7 @@ export const EmployeDashboard: React.FC = () => {
         id: '',
         user_id: user.id,
         magasin_id: magasin.id,
+        magasin_nom: magasin.nom,
         date_pointage: new Date(),
         latitude: position.latitude,
         longitude: position.longitude,
