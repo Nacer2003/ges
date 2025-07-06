@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Package, Eye, EyeOff, Mail, Lock } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
-import { authService } from '../services/api';
 
 export const LoginPage: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -11,7 +10,7 @@ export const LoginPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, login } = useAuth();
 
   React.useEffect(() => {
     if (user) {
@@ -29,8 +28,7 @@ export const LoginPage: React.FC = () => {
     setError('');
 
     try {
-      const response = await authService.login(email, password);
-      localStorage.setItem('token', response.access);
+      const response = await login(email, password);
       
       // Redirect based on user role
       if (response.user.role === 'admin') {
