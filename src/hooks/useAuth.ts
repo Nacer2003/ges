@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { authService } from '../services/api';
+import { apiRequest, endpoints } from '../config/api';
 import { User } from '../types';
 
 export const useAuth = () => {
@@ -7,55 +7,79 @@ export const useAuth = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const token = localStorage.getItem('access_token');
-        if (token) {
-          const userData = await authService.getMe();
+    const initAuth = async () => {
+      const token = localStorage.getItem('access_token');
+      
+      if (token) {
+        try {
+          const userData = await apiRequest(endpoints.currentUser);
           setUser({
-            id: userData.id.toString(),
+            id: userData.id,
             email: userData.email,
             nom: userData.nom || '',
             prenom: userData.prenom || '',
             role: userData.role,
-            magasin_id: userData.magasin_id?.toString() || null,
-            image_url: userData.image_url || '',
+            magasin_id: userData.magasin_id,
+            image_url: userData.image_url,
             createdAt: new Date(userData.created_at)
           });
+        } catch (error) {
+          console.error('Erreur lors de la récupération des données utilisateur:', error);
+          localStorage.removeItem('access_token');
+          localStorage.removeItem('refresh_token');
+          setUser(null);
         }
-      } catch (error) {
-        console.error('Erreur lors de la vérification de l\'authentification:', error);
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
-        setUser(null);
-      } finally {
-        setLoading(false);
       }
+      
+      setLoading(false);
     };
 
-    checkAuth();
+    initAuth();
   }, []);
 
   const login = async (email: string, password: string) => {
-    const response = await authService.login(email, password);
-    
-    setUser({
-      id: response.user.id.toString(),
-      email: response.user.email,
-      nom: response.user.nom || '',
-      prenom: response.user.prenom || '',
-      role: response.user.role,
-      magasin_id: response.user.magasin_id?.toString() || null,
-      image_url: response.user.image_url || '',
-      createdAt: new Date(response.user.created_at)
-    });
-    
-    return response;
+    try {
+      const response = await apiRequest(endpoints.login, {
+        method: 'POST',
+        body: JSON.stringify({ email, password }),
+      });
+      
+      localStorage.setItem('access_token', response.access);
+      localStorage.setItem('refresh_token', response.refresh);
+      
+      setUser({
+        id: response.user.id,
+        email: response.user.email,
+        nom: response.user.nom || '',
+        prenom: response.user.prenom || '',
+        role: response.user.role,
+        magasin_id: response.user.magasin_id,
+        image_url: response.user.image_url,
+        createdAt: new Date(response.user.created_at)
+      });
+      
+      return response;
+    } catch (error) {
+      throw error;
+    }
   };
 
   const logout = async () => {
-    await authService.logout();
-    setUser(null);
+    try {
+      const refreshToken = localStorage.getItem('refresh_token');
+      if (refreshToken) {
+        await apiRequest(endpoints.logout, {
+          method: 'POST',
+          body: JSON.stringify({ refresh: refreshToken }),
+        });
+      }
+    } catch (error) {
+      console.error('Erreur lors de la déconnexion:', error);
+    } finally {
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('refresh_token');
+      setUser(null);
+    }
   };
 
   return { user, loading, login, logout };

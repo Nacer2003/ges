@@ -1,238 +1,195 @@
-import { apiRequest } from '../config/api';
+import { apiRequest, endpoints } from '../config/api';
 
-// Auth Service
+// Auth Services
 export const authService = {
-  login: async (email: string, password: string) => {
-    const response = await apiRequest('/api/auth/login/', {
+  login: (email: string, password: string) =>
+    apiRequest(endpoints.login, {
       method: 'POST',
       body: JSON.stringify({ email, password }),
-    });
-    
-    localStorage.setItem('access_token', response.access);
-    localStorage.setItem('refresh_token', response.refresh);
-    
-    return response;
-  },
-
-  logout: async () => {
-    const refreshToken = localStorage.getItem('refresh_token');
-    if (refreshToken) {
-      try {
-        await apiRequest('/api/auth/logout/', {
-          method: 'POST',
-          body: JSON.stringify({ refresh: refreshToken }),
-        });
-      } catch (error) {
-        console.error('Logout error:', error);
+    }),
+  
+  logout: (refreshToken: string) =>
+    apiRequest(endpoints.logout, {
+      method: 'POST',
+      body: JSON.stringify({ refresh: refreshToken }),
+    }),
+  
+  getCurrentUser: () => apiRequest(endpoints.currentUser),
+  
+  getUsers: () => apiRequest(endpoints.users),
+  
+  createUser: (userData: any) => {
+    const formData = new FormData();
+    Object.keys(userData).forEach(key => {
+      if (userData[key] !== null && userData[key] !== undefined) {
+        formData.append(key, userData[key]);
       }
-    }
-    
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('refresh_token');
-  },
-
-  getMe: async () => {
-    return apiRequest('/api/auth/me/');
-  },
-
-  getUsers: async () => {
-    return apiRequest('/api/auth/users/');
-  },
-
-  createUser: async (userData: FormData) => {
-    return apiRequest('/api/auth/users/', {
-      method: 'POST',
-      headers: {}, // Remove Content-Type to let browser set it for FormData
-      body: userData,
     });
+    return apiUpload(endpoints.users, formData);
   },
-
-  updateUser: async (userId: string, userData: FormData) => {
-    return apiRequest(`/api/auth/users/${userId}/`, {
-      method: 'PATCH',
-      headers: {}, // Remove Content-Type to let browser set it for FormData
-      body: userData,
+  
+  updateUser: (id: string, userData: any) => {
+    const formData = new FormData();
+    Object.keys(userData).forEach(key => {
+      if (userData[key] !== null && userData[key] !== undefined) {
+        formData.append(key, userData[key]);
+      }
     });
+    return apiUpload(`${endpoints.users}${id}/`, formData);
   },
-
-  deleteUser: async (userId: string) => {
-    return apiRequest(`/api/auth/users/${userId}/`, {
-      method: 'DELETE',
-    });
-  },
+  
+  deleteUser: (id: string) =>
+    apiRequest(`${endpoints.users}${id}/`, { method: 'DELETE' }),
 };
 
-// Stores Service
-export const storesService = {
-  getStores: async () => {
-    return apiRequest('/api/stores/');
-  },
-
-  createStore: async (storeData: any) => {
-    return apiRequest('/api/stores/', {
-      method: 'POST',
-      body: JSON.stringify(storeData),
-    });
-  },
-
-  updateStore: async (storeId: string, storeData: any) => {
-    return apiRequest(`/api/stores/${storeId}/`, {
-      method: 'PATCH',
-      body: JSON.stringify(storeData),
-    });
-  },
-
-  deleteStore: async (storeId: string) => {
-    return apiRequest(`/api/stores/${storeId}/`, {
-      method: 'DELETE',
-    });
-  },
-};
-
-// Products Service
+// Products Services
 export const productsService = {
-  getProducts: async () => {
-    return apiRequest('/api/products/');
-  },
-
-  createProduct: async (productData: FormData) => {
-    return apiRequest('/api/products/', {
-      method: 'POST',
-      headers: {}, // Remove Content-Type to let browser set it for FormData
-      body: productData,
+  getProducts: () => apiRequest(endpoints.products),
+  
+  createProduct: (productData: any) => {
+    const formData = new FormData();
+    Object.keys(productData).forEach(key => {
+      if (productData[key] !== null && productData[key] !== undefined) {
+        formData.append(key, productData[key]);
+      }
     });
+    return apiUpload(endpoints.products, formData);
   },
-
-  updateProduct: async (productId: string, productData: FormData) => {
-    return apiRequest(`/api/products/${productId}/`, {
-      method: 'PATCH',
-      headers: {}, // Remove Content-Type to let browser set it for FormData
-      body: productData,
+  
+  updateProduct: (id: string, productData: any) => {
+    const formData = new FormData();
+    Object.keys(productData).forEach(key => {
+      if (productData[key] !== null && productData[key] !== undefined) {
+        formData.append(key, productData[key]);
+      }
     });
+    return apiUpload(`${endpoints.products}${id}/`, formData);
   },
-
-  deleteProduct: async (productId: string) => {
-    return apiRequest(`/api/products/${productId}/`, {
-      method: 'DELETE',
-    });
-  },
+  
+  deleteProduct: (id: string) =>
+    apiRequest(`${endpoints.products}${id}/`, { method: 'DELETE' }),
 };
 
-// Stock Service
-export const stockService = {
-  getStocks: async () => {
-    return apiRequest('/api/stock/');
+// Stores Services
+export const storesService = {
+  getStores: () => apiRequest(endpoints.stores),
+  
+  createStore: (storeData: any) => {
+    const formData = new FormData();
+    Object.keys(storeData).forEach(key => {
+      if (storeData[key] !== null && storeData[key] !== undefined) {
+        formData.append(key, storeData[key]);
+      }
+    });
+    return apiUpload(endpoints.stores, formData);
   },
+  
+  updateStore: (id: string, storeData: any) => {
+    const formData = new FormData();
+    Object.keys(storeData).forEach(key => {
+      if (storeData[key] !== null && storeData[key] !== undefined) {
+        formData.append(key, storeData[key]);
+      }
+    });
+    return apiUpload(`${endpoints.stores}${id}/`, formData);
+  },
+  
+  deleteStore: (id: string) =>
+    apiRequest(`${endpoints.stores}${id}/`, { method: 'DELETE' }),
+};
 
-  createStock: async (stockData: any) => {
-    return apiRequest('/api/stock/', {
+// Suppliers Services
+export const suppliersService = {
+  getSuppliers: () => apiRequest(endpoints.suppliers),
+  
+  createSupplier: (supplierData: any) => {
+    const formData = new FormData();
+    Object.keys(supplierData).forEach(key => {
+      if (supplierData[key] !== null && supplierData[key] !== undefined) {
+        formData.append(key, supplierData[key]);
+      }
+    });
+    return apiUpload(endpoints.suppliers, formData);
+  },
+  
+  updateSupplier: (id: string, supplierData: any) => {
+    const formData = new FormData();
+    Object.keys(supplierData).forEach(key => {
+      if (supplierData[key] !== null && supplierData[key] !== undefined) {
+        formData.append(key, supplierData[key]);
+      }
+    });
+    return apiUpload(`${endpoints.suppliers}${id}/`, formData);
+  },
+  
+  deleteSupplier: (id: string) =>
+    apiRequest(`${endpoints.suppliers}${id}/`, { method: 'DELETE' }),
+};
+
+// Stock Services
+export const stockService = {
+  getStocks: () => apiRequest(endpoints.stocks),
+  
+  createStock: (stockData: any) =>
+    apiRequest(endpoints.stocks, {
       method: 'POST',
       body: JSON.stringify(stockData),
-    });
-  },
-
-  updateStock: async (stockId: string, stockData: any) => {
-    return apiRequest(`/api/stock/${stockId}/`, {
-      method: 'PATCH',
+    }),
+  
+  updateStock: (id: string, stockData: any) =>
+    apiRequest(`${endpoints.stocks}${id}/`, {
+      method: 'PUT',
       body: JSON.stringify(stockData),
-    });
-  },
-
-  deleteStock: async (stockId: string) => {
-    return apiRequest(`/api/stock/${stockId}/`, {
-      method: 'DELETE',
-    });
-  },
-
-  createMovement: async (movementData: any) => {
-    return apiRequest('/api/stock/movements/', {
+    }),
+  
+  deleteStock: (id: string) =>
+    apiRequest(`${endpoints.stocks}${id}/`, { method: 'DELETE' }),
+  
+  getMovements: () => apiRequest(endpoints.movements),
+  
+  createMovement: (movementData: any) =>
+    apiRequest(endpoints.movements, {
       method: 'POST',
       body: JSON.stringify(movementData),
-    });
-  },
-
-  getMovements: async () => {
-    return apiRequest('/api/stock/movements/');
-  },
+    }),
 };
 
-// Suppliers Service
-export const suppliersService = {
-  getSuppliers: async () => {
-    return apiRequest('/api/suppliers/');
-  },
-
-  createSupplier: async (supplierData: any) => {
-    return apiRequest('/api/suppliers/', {
-      method: 'POST',
-      body: JSON.stringify(supplierData),
-    });
-  },
-
-  updateSupplier: async (supplierId: string, supplierData: any) => {
-    return apiRequest(`/api/suppliers/${supplierId}/`, {
-      method: 'PATCH',
-      body: JSON.stringify(supplierData),
-    });
-  },
-
-  deleteSupplier: async (supplierId: string) => {
-    return apiRequest(`/api/suppliers/${supplierId}/`, {
-      method: 'DELETE',
-    });
-  },
-};
-
-// Attendance Service
+// Attendance Services
 export const attendanceService = {
-  getAttendance: async () => {
-    return apiRequest('/api/attendance/');
-  },
-
-  createAttendance: async (attendanceData: any) => {
-    return apiRequest('/api/attendance/', {
+  getAttendance: () => apiRequest(endpoints.attendance),
+  
+  createAttendance: (attendanceData: any) =>
+    apiRequest(endpoints.attendance, {
       method: 'POST',
       body: JSON.stringify(attendanceData),
-    });
-  },
-
-  updateAttendance: async (attendanceId: string, attendanceData: any) => {
-    return apiRequest(`/api/attendance/${attendanceId}/`, {
-      method: 'PATCH',
+    }),
+  
+  updateAttendance: (id: string, attendanceData: any) =>
+    apiRequest(`${endpoints.attendance}${id}/`, {
+      method: 'PUT',
       body: JSON.stringify(attendanceData),
-    });
-  },
-
-  deleteAttendance: async (attendanceId: string) => {
-    return apiRequest(`/api/attendance/${attendanceId}/`, {
-      method: 'DELETE',
-    });
-  },
+    }),
+  
+  deleteAttendance: (id: string) =>
+    apiRequest(`${endpoints.attendance}${id}/`, { method: 'DELETE' }),
 };
 
-// Messaging Service
+// Messaging Services
 export const messagingService = {
-  getMessages: async () => {
-    return apiRequest('/api/messaging/');
-  },
-
-  createMessage: async (messageData: any) => {
-    return apiRequest('/api/messaging/', {
+  getMessages: () => apiRequest(endpoints.messages),
+  
+  createMessage: (messageData: any) =>
+    apiRequest(endpoints.messages, {
       method: 'POST',
       body: JSON.stringify(messageData),
-    });
-  },
-
-  updateMessage: async (messageId: string, messageData: any) => {
-    return apiRequest(`/api/messaging/${messageId}/`, {
-      method: 'PATCH',
+    }),
+  
+  updateMessage: (id: string, messageData: any) =>
+    apiRequest(`${endpoints.messages}${id}/`, {
+      method: 'PUT',
       body: JSON.stringify(messageData),
-    });
-  },
-
-  deleteMessage: async (messageId: string) => {
-    return apiRequest(`/api/messaging/${messageId}/`, {
-      method: 'DELETE',
-    });
-  },
+    }),
+  
+  deleteMessage: (id: string) =>
+    apiRequest(`${endpoints.messages}${id}/`, { method: 'DELETE' }),
 };

@@ -1,62 +1,122 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_BASE_URL = 'http://localhost:8000/api';
 
-export const apiRequest = async (endpoint: string, options: RequestInit = {}) => {
+// Configuration de l'API
+export const apiConfig = {
+  baseURL: API_BASE_URL,
+  timeout: 10000,
+};
+
+// Helper pour les requêtes authentifiées
+const getAuthHeaders = () => {
   const token = localStorage.getItem('access_token');
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
+
+// Helper pour les requêtes avec fichiers
+const getFormDataHeaders = () => ({
+  ...getAuthHeaders(),
+  // Ne pas définir Content-Type pour FormData, le navigateur le fera automatiquement
+});
+
+// Helper pour les requêtes JSON
+const getJsonHeaders = () => ({
+  ...getAuthHeaders(),
+  'Content-Type': 'application/json',
+});
+
+// Fonction générique pour les requêtes API
+export const apiRequest = async (endpoint: string, options: RequestInit = {}) => {
+  const url = `${API_BASE_URL}${endpoint}`;
   
-  const config: RequestInit = {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token && { Authorization: `Bearer ${token}` }),
-      ...options.headers,
-    },
+  const defaultOptions: RequestInit = {
+    headers: getJsonHeaders(),
     ...options,
   };
 
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
-
-  if (!response.ok) {
+  try {
+    const response = await fetch(url, defaultOptions);
+    
     if (response.status === 401) {
-      // Token expired, try to refresh
-      const refreshToken = localStorage.getItem('refresh_token');
-      if (refreshToken) {
-        try {
-          const refreshResponse = await fetch(`${API_BASE_URL}/api/auth/refresh/`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ refresh: refreshToken }),
-          });
-
-          if (refreshResponse.ok) {
-            const { access } = await refreshResponse.json();
-            localStorage.setItem('access_token', access);
-            
-            // Retry original request with new token
-            config.headers = {
-              ...config.headers,
-              Authorization: `Bearer ${access}`,
-            };
-            const retryResponse = await fetch(`${API_BASE_URL}${endpoint}`, config);
-            if (retryResponse.ok) {
-              return retryResponse.json();
-            }
-          }
-        } catch (error) {
-          console.error('Token refresh failed:', error);
-        }
-      }
-      
-      // If refresh fails, clear tokens and redirect to login
+      // Token expiré, rediriger vers login
       localStorage.removeItem('access_token');
       localStorage.removeItem('refresh_token');
       window.location.href = '/login';
-      throw new Error('Authentication failed');
+      throw new Error('Session expirée');
     }
     
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `Erreur HTTP: ${response.status}`);
+    }
+    
+    const contentType = response.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      return await response.json();
+    }
+    
+    return response;
+  } catch (error) {
+    console.error('Erreur API:', error);
+    throw error;
   }
+};
 
-  return response.json();
+// Fonction pour les uploads de fichiers
+export const apiUpload = async (endpoint: string, formData: FormData) => {
+  const url = `${API_BASE_URL}${endpoint}`;
+  
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: getAuthHeaders(), // Pas de Content-Type pour FormData
+      body: formData,
+    });
+    
+    if (response.status === 401) {
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('refresh_token');
+      window.location.href = '/login';
+      throw new Error('Session expirée');
+    }
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `Erreur HTTP: ${response.status}`);
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('Erreur upload:', error);
+    throw error;
+  }
+};
+
+// API endpoints
+export const endpoints = {
+  // Auth
+  login: '/auth/login/',
+  logout: '/auth/logout/',
+  refresh: '/auth/refresh/',
+  currentUser: '/auth/me/',
+  users: '/auth/users/',
+  
+  // Products
+  products: '/products/',
+  
+  // Stores
+  stores: '/stores/',
+  
+  // Suppliers
+  suppliers: '/suppliers/',
+  
+  // Stock
+  stocks: '/stock/stocks/',
+  movements: '/stock/mouvements/',
+  orders: '/stock/commandes/',
+  
+  // Attendance
+  attendance: '/attendance/presences/',
+  
+  // Messaging
+  messages: '/messaging/messages/',
 };

@@ -28,14 +28,8 @@ export const LoginPage: React.FC = () => {
     setError('');
 
     try {
-      const response = await login(email, password);
-      
-      // Redirect based on user role
-      if (response.user.role === 'admin') {
-        navigate('/admin/dashboard');
-      } else {
-        navigate('/employe/dashboard');
-      }
+      await login(email, password);
+      // La redirection se fera automatiquement via useEffect
     } catch (error: any) {
       setError('Email ou mot de passe incorrect');
     } finally {
