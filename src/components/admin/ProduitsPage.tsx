@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
 import { Plus, Edit, Trash2, Search, Package, AlertTriangle, Save, X } from 'lucide-react';
-import { db } from '../../config/firebase';
+import { productsService, suppliersService } from '../../services/api';
 import { Produit, Fournisseur } from '../../types';
 import { ImageUpload } from '../ImageUpload';
 import toast from 'react-hot-toast';
@@ -19,8 +18,8 @@ export const ProduitsPage: React.FC = () => {
     categorie: '',
     prix_unitaire: 0,
     seuil_alerte: 0,
-    fournisseur_id: '',
-    image_url: ''
+    fournisseur: '',
+    image: null as File | null
   });
 
   useEffect(() => {
@@ -30,13 +29,11 @@ export const ProduitsPage: React.FC = () => {
 
   const fetchProduits = async () => {
     try {
-      const snapshot = await getDocs(collection(db, 'produits'));
-      const produitsData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt?.toDate() || new Date()
-      })) as Produit[];
-      setProduits(produitsData);
+      const data = await productsService.getProducts();
+      setProduits(data.map((item: any) => ({
+        ...item,
+        createdAt: new Date(item.created_at)
+      })));
     } catch (error) {
       toast.error('Erreur lors du chargement des produits');
     } finally {
@@ -46,13 +43,11 @@ export const ProduitsPage: React.FC = () => {
 
   const fetchFournisseurs = async () => {
     try {
-      const snapshot = await getDocs(collection(db, 'fournisseurs'));
-      const fournisseursData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt?.toDate() || new Date()
-      })) as Fournisseur[];
-      setFournisseurs(fournisseursData);
+      const data = await suppliersService.getSuppliers();
+      setFournisseurs(data.map((item: any) => ({
+        ...item,
+        createdAt: new Date(item.created_at)
+      })));
     } catch (error) {
       console.error('Erreur lors du chargement des fournisseurs:', error);
     }
@@ -64,15 +59,20 @@ export const ProduitsPage: React.FC = () => {
 
     try {
       const produitData = {
-        ...formData,
-        createdAt: editingProduit ? editingProduit.createdAt : new Date()
+        nom: formData.nom,
+        reference: formData.reference,
+        categorie: formData.categorie,
+        prix_unitaire: formData.prix_unitaire,
+        seuil_alerte: formData.seuil_alerte,
+        fournisseur: formData.fournisseur || null,
+        image: formData.image
       };
 
       if (editingProduit) {
-        await updateDoc(doc(db, 'produits', editingProduit.id), produitData);
+        await productsService.updateProduct(editingProduit.id, produitData);
         toast.success('Produit modifié avec succès');
       } else {
-        await addDoc(collection(db, 'produits'), produitData);
+        await productsService.createProduct(produitData);
         toast.success('Produit ajouté avec succès');
       }
 
@@ -93,8 +93,8 @@ export const ProduitsPage: React.FC = () => {
       categorie: produit.categorie,
       prix_unitaire: produit.prix_unitaire,
       seuil_alerte: produit.seuil_alerte,
-      fournisseur_id: produit.fournisseur_id || '',
-      image_url: produit.image_url || ''
+      fournisseur: produit.fournisseur_id || '',
+      image: null
     });
     setShowModal(true);
   };
@@ -103,7 +103,7 @@ export const ProduitsPage: React.FC = () => {
     if (!confirm('Êtes-vous sûr de vouloir supprimer ce produit ?')) return;
 
     try {
-      await deleteDoc(doc(db, 'produits', produit.id));
+      await productsService.deleteProduct(produit.id);
       toast.success('Produit supprimé avec succès');
       fetchProduits();
     } catch (error) {
@@ -118,8 +118,8 @@ export const ProduitsPage: React.FC = () => {
       categorie: '',
       prix_unitaire: 0,
       seuil_alerte: 0,
-      fournisseur_id: '',
-      image_url: ''
+      fournisseur: '',
+      image: null
     });
     setEditingProduit(null);
     setShowModal(false);
@@ -180,7 +180,7 @@ export const ProduitsPage: React.FC = () => {
               <div className="h-48 bg-gray-100 relative">
                 {produit.image_url ? (
                   <img
-                    src={produit.image_url}
+                    src={`http://localhost:8000${produit.image_url}`}
                     alt={produit.nom}
                     className="w-full h-full object-cover"
                   />
@@ -284,8 +284,8 @@ export const ProduitsPage: React.FC = () => {
 
               <form onSubmit={handleSubmit} className="space-y-6">
                 <ImageUpload
-                  currentImage={formData.image_url}
-                  onImageChange={(imageUrl) => setFormData({ ...formData, image_url: imageUrl })}
+                  currentImage={editingProduit?.image_url ? `http://localhost:8000${editingProduit.image_url}` : undefined}
+                  onImageChange={(file) => setFormData({ ...formData, image: file })}
                 />
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -361,8 +361,8 @@ export const ProduitsPage: React.FC = () => {
                       Fournisseur
                     </label>
                     <select
-                      value={formData.fournisseur_id}
-                      onChange={(e) => setFormData({ ...formData, fournisseur_id: e.target.value })}
+                      value={formData.fournisseur}
+                      onChange={(e) => setFormData({ ...formData, fournisseur: e.target.value })}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
                       <option value="">Sélectionner un fournisseur</option>

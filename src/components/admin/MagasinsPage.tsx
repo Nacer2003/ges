@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
 import { Plus, Edit, Trash2, Search, Store, MapPin, Save, X } from 'lucide-react';
-import { db } from '../../config/firebase';
+import { storesService } from '../../services/api';
 import { Magasin } from '../../types';
 import { MapSelector } from '../MapSelector';
 import { ImageUpload } from '../ImageUpload';
@@ -18,7 +17,7 @@ export const MagasinsPage: React.FC = () => {
     adresse: '',
     latitude: 33.5731, // Casablanca par défaut
     longitude: -7.5898,
-    image_url: ''
+    image: null as File | null
   });
 
   useEffect(() => {
@@ -27,13 +26,11 @@ export const MagasinsPage: React.FC = () => {
 
   const fetchMagasins = async () => {
     try {
-      const snapshot = await getDocs(collection(db, 'magasins'));
-      const magasinsData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt?.toDate() || new Date()
-      })) as Magasin[];
-      setMagasins(magasinsData);
+      const data = await storesService.getStores();
+      setMagasins(data.map((item: any) => ({
+        ...item,
+        createdAt: new Date(item.created_at)
+      })));
     } catch (error) {
       toast.error('Erreur lors du chargement des magasins');
     } finally {
@@ -47,15 +44,18 @@ export const MagasinsPage: React.FC = () => {
 
     try {
       const magasinData = {
-        ...formData,
-        createdAt: editingMagasin ? editingMagasin.createdAt : new Date()
+        nom: formData.nom,
+        adresse: formData.adresse,
+        latitude: formData.latitude,
+        longitude: formData.longitude,
+        image: formData.image
       };
 
       if (editingMagasin) {
-        await updateDoc(doc(db, 'magasins', editingMagasin.id), magasinData);
+        await storesService.updateStore(editingMagasin.id, magasinData);
         toast.success('Magasin modifié avec succès');
       } else {
-        await addDoc(collection(db, 'magasins'), magasinData);
+        await storesService.createStore(magasinData);
         toast.success('Magasin ajouté avec succès');
       }
 
@@ -75,7 +75,7 @@ export const MagasinsPage: React.FC = () => {
       adresse: magasin.adresse,
       latitude: magasin.latitude,
       longitude: magasin.longitude,
-      image_url: magasin.image_url || ''
+      image: null
     });
     setShowModal(true);
   };
@@ -84,7 +84,7 @@ export const MagasinsPage: React.FC = () => {
     if (!confirm('Êtes-vous sûr de vouloir supprimer ce magasin ?')) return;
 
     try {
-      await deleteDoc(doc(db, 'magasins', magasin.id));
+      await storesService.deleteStore(magasin.id);
       toast.success('Magasin supprimé avec succès');
       fetchMagasins();
     } catch (error) {
@@ -96,9 +96,9 @@ export const MagasinsPage: React.FC = () => {
     setFormData({
       nom: '',
       adresse: '',
-      latitude: 33.5731, // Casablanca par défaut
+      latitude: 33.5731,
       longitude: -7.5898,
-      image_url: ''
+      image: null
     });
     setEditingMagasin(null);
     setShowModal(false);
@@ -164,7 +164,7 @@ export const MagasinsPage: React.FC = () => {
             <div className="h-48 bg-gray-100 relative">
               {magasin.image_url ? (
                 <img
-                  src={magasin.image_url}
+                  src={`http://localhost:8000${magasin.image_url}`}
                   alt={magasin.nom}
                   className="w-full h-full object-cover"
                 />
@@ -278,8 +278,8 @@ export const MagasinsPage: React.FC = () => {
                     </div>
 
                     <ImageUpload
-                      currentImage={formData.image_url}
-                      onImageChange={(imageUrl) => setFormData({ ...formData, image_url: imageUrl })}
+                      currentImage={editingMagasin?.image_url ? `http://localhost:8000${editingMagasin.image_url}` : undefined}
+                      onImageChange={(file) => setFormData({ ...formData, image: file })}
                     />
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

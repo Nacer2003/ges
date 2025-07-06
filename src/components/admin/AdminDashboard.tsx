@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, getDocs, where } from 'firebase/firestore';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { Package, Store, Users, AlertTriangle, TrendingUp, DollarSign } from 'lucide-react';
-import { db } from '../../config/firebase';
+import { productsService, storesService, authService, stockService } from '../../services/api';
 import { Produit, Stock, Magasin, User } from '../../types';
 
 export const AdminDashboard: React.FC = () => {
@@ -17,84 +16,84 @@ export const AdminDashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchDashboardData = async () => {
-      try {
-        // Récupérer les produits
-        const produitsSnapshot = await getDocs(collection(db, 'produits'));
-        const produits = produitsSnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        })) as Produit[];
-
-        // Récupérer les magasins
-        const magasinsSnapshot = await getDocs(collection(db, 'magasins'));
-        const magasins = magasinsSnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        })) as Magasin[];
-
-        // Récupérer les utilisateurs
-        const utilisateursSnapshot = await getDocs(collection(db, 'users'));
-        const utilisateurs = utilisateursSnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        })) as User[];
-
-        // Récupérer les stocks
-        const stocksSnapshot = await getDocs(collection(db, 'stocks'));
-        const stocks = stocksSnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        })) as Stock[];
-
-        // Calculer les alertes de stock
-        let alertesCount = 0;
-        let valeurTotale = 0;
-        const stockDataMap = new Map();
-
-        stocks.forEach(stock => {
-          const produit = produits.find(p => p.id === stock.produit_id);
-          if (produit) {
-            if (stock.quantite <= produit.seuil_alerte) {
-              alertesCount++;
-            }
-            valeurTotale += stock.quantite * produit.prix_unitaire;
-
-            const magasin = magasins.find(m => m.id === stock.magasin_id);
-            if (magasin) {
-              const key = magasin.nom;
-              if (stockDataMap.has(key)) {
-                stockDataMap.set(key, stockDataMap.get(key) + stock.quantite);
-              } else {
-                stockDataMap.set(key, stock.quantite);
-              }
-            }
-          }
-        });
-
-        const stockChartData = Array.from(stockDataMap.entries()).map(([nom, quantite]) => ({
-          magasin: nom,
-          quantite
-        }));
-
-        setStats({
-          totalProduits: produits.length,
-          totalMagasins: magasins.length,
-          totalUtilisateurs: utilisateurs.length,
-          alertesStock: alertesCount,
-          valeurTotaleStock: valeurTotale
-        });
-
-        setStockData(stockChartData);
-      } catch (error) {
-        console.error('Erreur lors du chargement des données:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchDashboardData();
   }, []);
+
+  const fetchDashboardData = async () => {
+    try {
+      // Récupérer toutes les données en parallèle
+      const [produitsData, magasinsData, utilisateursData, stocksData] = await Promise.all([
+        productsService.getProducts(),
+        storesService.getStores(),
+        authService.getUsers(),
+        stockService.getStocks()
+      ]);
+
+      const produits = produitsData.map((item: any) => ({
+        ...item,
+        createdAt: new Date(item.created_at)
+      })) as Produit[];
+
+      const magasins = magasinsData.map((item: any) => ({
+        ...item,
+        createdAt: new Date(item.created_at)
+      })) as Magasin[];
+
+      const utilisateurs = utilisateursData.map((item: any) => ({
+        ...item,
+        createdAt: new Date(item.created_at)
+      })) as User[];
+
+      const stocks = stocksData.map((item: any) => ({
+        ...item,
+        updatedAt: new Date(item.updated_at)
+      })) as Stock[];
+
+      // Calculer les alertes de stock
+      let alertesCount = 0;
+      let valeurTotale = 0;
+      const stockDataMap = new Map();
+
+      stocks.forEach(stock => {
+        const produit = produits.find(p => p.id === stock.produit_id);
+        if (produit) {
+          if (stock.quantite <= produit.seuil_alerte) {
+            alertesCount++;
+          }
+          valeurTotale += stock.quantite * produit.prix_unitaire;
+
+          const magasin = magasins.find(m => m.id === stock.magasin_id);
+          if (magasin) {
+            const key = magasin.nom;
+            if (stockDataMap.has(key)) {
+              stockDataMap.set(key, stockDataMap.get(key) + stock.quantite);
+            } else {
+              stockDataMap.set(key, stock.quantite);
+            }
+          }
+        }
+      });
+
+      const stockChartData = Array.from(stockDataMap.entries()).map(([nom, quantite]) => ({
+        magasin: nom,
+        quantite
+      }));
+
+      setStats({
+        totalProduits: produits.length,
+        totalMagasins: magasins.length,
+        totalUtilisateurs: utilisateurs.length,
+        alertesStock: alertesCount,
+        valeurTotaleStock: valeurTotale
+      });
+
+      setStockData(stockChartData);
+    } catch (error) {
+      console.error('Erreur lors du chargement des données:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   if (loading) {
     return (

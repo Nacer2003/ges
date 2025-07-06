@@ -1,5 +1,4 @@
 import React from 'react';
-import { signOut } from 'firebase/auth';
 import { useNavigate } from 'react-router-dom';
 import { 
   Package, 
@@ -17,7 +16,6 @@ import {
   Bell,
   User
 } from 'lucide-react';
-import { auth } from '../config/firebase';
 import { useAuth } from '../hooks/useAuth';
 import { MessagingWidget } from './MessagingWidget';
 import { NotificationWidget } from './NotificationWidget';
@@ -27,13 +25,13 @@ interface LayoutProps {
 }
 
 export const Layout: React.FC<LayoutProps> = ({ children }) => {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
 
   const handleLogout = async () => {
     try {
-      await signOut(auth);
+      await logout();
       navigate('/login');
     } catch (error) {
       console.error('Erreur lors de la déconnexion:', error);
@@ -118,7 +116,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                 <div className="w-8 h-8 rounded-full overflow-hidden">
                   {user?.image_url ? (
                     <img
-                      src={user.image_url}
+                      src={`http://localhost:8000${user.image_url}`}
                       alt={`${user.prenom} ${user.nom}`}
                       className="w-full h-full object-cover"
                     />

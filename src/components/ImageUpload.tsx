@@ -1,11 +1,10 @@
 import React, { useState } from 'react';
 import { Upload, X, Image as ImageIcon } from 'lucide-react';
-import { uploadToCloudinary } from '../config/cloudinary';
 import toast from 'react-hot-toast';
 
 interface ImageUploadProps {
   currentImage?: string;
-  onImageChange: (imageUrl: string) => void;
+  onImageChange: (imageFile: File | null) => void;
   className?: string;
 }
 
@@ -14,8 +13,8 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
   onImageChange,
   className = ''
 }) => {
-  const [uploading, setUploading] = useState(false);
   const [preview, setPreview] = useState<string | null>(currentImage || null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -33,46 +32,21 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
       return;
     }
 
-    // Créer un aperçu local immédiatement
+    // Créer un aperçu local
     const reader = new FileReader();
     reader.onload = (e) => {
       setPreview(e.target?.result as string);
     };
     reader.readAsDataURL(file);
 
-    // L'upload se fera seulement lors de la sauvegarde du formulaire
-    // Stocker le fichier temporairement
-    (window as any).pendingImageFile = file;
+    setSelectedFile(file);
+    onImageChange(file);
   };
-
-  const uploadPendingImage = async (): Promise<string> => {
-    const file = (window as any).pendingImageFile;
-    if (!file) return currentImage || '';
-
-    setUploading(true);
-    try {
-      const imageUrl = await uploadToCloudinary(file);
-      setPreview(imageUrl);
-      delete (window as any).pendingImageFile;
-      return imageUrl;
-    } catch (error) {
-      toast.error('Erreur lors de l\'upload de l\'image');
-      setPreview(currentImage || null);
-      return currentImage || '';
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  // Exposer la fonction d'upload pour le formulaire parent
-  React.useEffect(() => {
-    (window as any).uploadPendingImage = uploadPendingImage;
-  }, []);
 
   const removeImage = () => {
     setPreview(null);
-    onImageChange('');
-    delete (window as any).pendingImageFile;
+    setSelectedFile(null);
+    onImageChange(null);
   };
 
   return (
@@ -112,33 +86,21 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
         type="file"
         accept="image/*"
         onChange={handleFileSelect}
-        disabled={uploading}
         className="hidden"
         id="image-upload"
       />
       
       <label
         htmlFor="image-upload"
-        className={`inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 cursor-pointer transition-colors ${
-          uploading ? 'opacity-50 cursor-not-allowed' : ''
-        }`}
+        className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 cursor-pointer transition-colors"
       >
-        {uploading ? (
-          <>
-            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
-            Upload en cours...
-          </>
-        ) : (
-          <>
-            <Upload className="h-4 w-4 mr-2" />
-            Choisir une image
-          </>
-        )}
+        <Upload className="h-4 w-4 mr-2" />
+        Choisir une image
       </label>
       
-      {(window as any).pendingImageFile && (
+      {selectedFile && (
         <p className="text-xs text-blue-600">
-          Image sélectionnée. Elle sera uploadée lors de la sauvegarde.
+          Image sélectionnée: {selectedFile.name}
         </p>
       )}
     </div>

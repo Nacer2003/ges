@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
 import { Plus, Edit, Trash2, Search, Truck, Phone, MapPin, Save, X } from 'lucide-react';
-import { db } from '../../config/firebase';
+import { suppliersService } from '../../services/api';
 import { Fournisseur } from '../../types';
 import { ImageUpload } from '../ImageUpload';
 import toast from 'react-hot-toast';
@@ -16,7 +15,7 @@ export const FournisseursPage: React.FC = () => {
     nom: '',
     adresse: '',
     contact: '',
-    image_url: ''
+    image: null as File | null
   });
 
   useEffect(() => {
@@ -25,13 +24,11 @@ export const FournisseursPage: React.FC = () => {
 
   const fetchFournisseurs = async () => {
     try {
-      const snapshot = await getDocs(collection(db, 'fournisseurs'));
-      const fournisseursData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt?.toDate() || new Date()
-      })) as Fournisseur[];
-      setFournisseurs(fournisseursData);
+      const data = await suppliersService.getSuppliers();
+      setFournisseurs(data.map((item: any) => ({
+        ...item,
+        createdAt: new Date(item.created_at)
+      })));
     } catch (error) {
       toast.error('Erreur lors du chargement des fournisseurs');
     } finally {
@@ -45,15 +42,17 @@ export const FournisseursPage: React.FC = () => {
 
     try {
       const fournisseurData = {
-        ...formData,
-        createdAt: editingFournisseur ? editingFournisseur.createdAt : new Date()
+        nom: formData.nom,
+        adresse: formData.adresse,
+        contact: formData.contact,
+        image: formData.image
       };
 
       if (editingFournisseur) {
-        await updateDoc(doc(db, 'fournisseurs', editingFournisseur.id), fournisseurData);
+        await suppliersService.updateSupplier(editingFournisseur.id, fournisseurData);
         toast.success('Fournisseur modifié avec succès');
       } else {
-        await addDoc(collection(db, 'fournisseurs'), fournisseurData);
+        await suppliersService.createSupplier(fournisseurData);
         toast.success('Fournisseur ajouté avec succès');
       }
 
@@ -72,7 +71,7 @@ export const FournisseursPage: React.FC = () => {
       nom: fournisseur.nom,
       adresse: fournisseur.adresse,
       contact: fournisseur.contact,
-      image_url: fournisseur.image_url || ''
+      image: null
     });
     setShowModal(true);
   };
@@ -81,7 +80,7 @@ export const FournisseursPage: React.FC = () => {
     if (!confirm('Êtes-vous sûr de vouloir supprimer ce fournisseur ?')) return;
 
     try {
-      await deleteDoc(doc(db, 'fournisseurs', fournisseur.id));
+      await suppliersService.deleteSupplier(fournisseur.id);
       toast.success('Fournisseur supprimé avec succès');
       fetchFournisseurs();
     } catch (error) {
@@ -94,7 +93,7 @@ export const FournisseursPage: React.FC = () => {
       nom: '',
       adresse: '',
       contact: '',
-      image_url: ''
+      image: null
     });
     setEditingFournisseur(null);
     setShowModal(false);
@@ -152,7 +151,7 @@ export const FournisseursPage: React.FC = () => {
             <div className="h-48 bg-gray-100 relative">
               {fournisseur.image_url ? (
                 <img
-                  src={fournisseur.image_url}
+                  src={`http://localhost:8000${fournisseur.image_url}`}
                   alt={fournisseur.nom}
                   className="w-full h-full object-cover"
                 />
@@ -234,8 +233,8 @@ export const FournisseursPage: React.FC = () => {
 
               <form onSubmit={handleSubmit} className="space-y-6">
                 <ImageUpload
-                  currentImage={formData.image_url}
-                  onImageChange={(imageUrl) => setFormData({ ...formData, image_url: imageUrl })}
+                  currentImage={editingFournisseur?.image_url ? `http://localhost:8000${editingFournisseur.image_url}` : undefined}
+                  onImageChange={(file) => setFormData({ ...formData, image: file })}
                 />
 
                 <div>

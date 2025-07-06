@@ -2,12 +2,12 @@
 
 ## 📋 Description
 
-StockPro est une application web moderne de gestion de stock multi-magasin conçue pour un usage professionnel. Elle offre une interface sécurisée avec des rôles différenciés et fonctionne entièrement avec React (frontend) et Firebase (backend).
+StockPro est une application web moderne de gestion de stock multi-magasin conçue pour un usage professionnel. Elle utilise React (frontend) et Django avec MySQL (backend).
 
 ## ✨ Fonctionnalités
 
 ### 🔐 Authentification & Sécurité
-- Firebase Authentication (email + mot de passe)
+- JWT Authentication avec Django
 - Application 100% privée (accès authentifié uniquement)
 - Gestion de rôles : **admin** et **employé**
 - Protection des routes selon les rôles
@@ -33,178 +33,163 @@ StockPro est une application web moderne de gestion de stock multi-magasin conç
 
 ## 🛠️ Technologies Utilisées
 
-- **Frontend** : React 18 + TypeScript
-- **Styling** : Tailwind CSS
-- **Backend** : Firebase (Firestore, Auth, Storage)
-- **Graphiques** : Recharts
-- **Icons** : Lucide React
-- **Routing** : React Router DOM
+### Frontend
+- **React 18** + TypeScript
+- **Tailwind CSS** pour le styling
+- **React Router DOM** pour la navigation
+- **Recharts** pour les graphiques
+- **Lucide React** pour les icônes
 
-## 🔧 Configuration Firebase
+### Backend
+- **Django 4.2** + Django REST Framework
+- **MySQL** (via XAMPP)
+- **JWT Authentication**
+- **Stockage local** des images
+- **CORS** configuré pour React
 
-### 1. Créer un projet Firebase
-1. Allez sur [Firebase Console](https://console.firebase.google.com/)
-2. Créez un nouveau projet
-3. Activez les services suivants :
-   - **Authentication** (Email/Password)
-   - **Firestore Database**
-   - **Storage**
-
-### 2. Configuration de l'application
-1. Copiez les clés de configuration Firebase
-2. Remplacez les valeurs dans `src/config/firebase.ts`
-
-```typescript
-const firebaseConfig = {
-  apiKey: "votre-api-key",
-  authDomain: "votre-projet.firebaseapp.com",
-  projectId: "votre-projet-id",
-  storageBucket: "votre-projet.appspot.com",
-  messagingSenderId: "123456789",
-  appId: "votre-app-id"
-};
-```
-
-### 3. Structure Firestore
-
-L'application utilise les collections suivantes :
-
-```
-📁 collections/
-├── users (id, email, role, magasin_id, createdAt)
-├── magasins (id, nom, adresse, latitude, longitude, createdAt)
-├── produits (id, nom, reference, categorie, prix_unitaire, seuil_alerte, image_url, createdAt)
-├── fournisseurs (id, nom, adresse, contact, createdAt)
-├── stocks (id, produit_id, magasin_id, quantite, updatedAt)
-├── mouvements (id, produit_id, magasin_id, user_id, type, quantite, date, motif)
-├── commandes (id, fournisseur_id, date, statut, total)
-├── commandes_details (id, commande_id, produit_id, quantite, prix_unitaire)
-└── presences (id, user_id, magasin_id, date_pointage, latitude, longitude, type)
-```
-
-### 4. Règles de sécurité Firestore
-
-```javascript
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    // Règles pour les utilisateurs authentifiés uniquement
-    match /{document=**} {
-      allow read, write: if request.auth != null;
-    }
-  }
-}
-```
-
-## 🚀 Installation et Démarrage
+## 🚀 Installation
 
 ### Prérequis
 - Node.js 18+
-- npm ou yarn
+- Python 3.8+
+- XAMPP avec MySQL
 
-### Étapes d'installation
+### 1. Backend Django
 
-1. **Cloner le projet**
 ```bash
-git clone <votre-repo>
-cd stock-management-app
+# Aller dans le dossier backend
+cd backend
+
+# Créer l'environnement virtuel
+python -m venv venv
+
+# Activer l'environnement virtuel
+# Windows:
+venv\Scripts\activate
+# macOS/Linux:
+source venv/bin/activate
+
+# Installer les dépendances
+pip install -r requirements.txt
+
+# Configurer la base de données
+cp .env.example .env
+# Éditer .env avec vos paramètres MySQL
+
+# Initialiser la base de données
+python setup_database.py
+
+# Démarrer le serveur Django
+python manage.py runserver
 ```
 
-2. **Installer les dépendances**
+Le backend sera accessible sur `http://localhost:8000`
+
+### 2. Frontend React
+
 ```bash
+# Installer les dépendances
 npm install
-```
 
-3. **Configurer Firebase**
-   - Suivez les étapes de configuration Firebase ci-dessus
-
-4. **Lancer l'application**
-```bash
+# Démarrer le serveur de développement
 npm run dev
 ```
 
-L'application sera accessible sur `http://localhost:5173`
+Le frontend sera accessible sur `http://localhost:5173`
 
-## 👥 Gestion des Utilisateurs
+## 👥 Comptes par défaut
 
-### Créer le premier administrateur
+Après l'installation du backend, un compte administrateur est créé :
 
-1. Créez un compte utilisateur via l'interface de connexion
-2. Dans la console Firebase Firestore :
-   - Allez dans la collection `users`
-   - Trouvez votre utilisateur
-   - Modifiez le champ `role` en `admin`
+- **Email** : `admin@stockpro.com`
+- **Mot de passe** : `admin123`
+- **Rôle** : Administrateur
 
-### Rôles et Permissions
+⚠️ **Important** : Changez ce mot de passe en production !
 
-#### Administrateur (`admin`)
-- Accès complet à toutes les fonctionnalités
-- Gestion des produits, magasins, fournisseurs
-- Consultation des présences
-- Dashboard statistique complet
+## 📊 Structure de la base de données
 
-#### Employé (`employe`)
-- Pointage avec géolocalisation
-- Consultation du stock de son magasin
-- Saisie des mouvements de stock
-- Dashboard simplifié
+### Tables principales
 
-## 📱 Utilisation
+1. **accounts_user** - Utilisateurs avec authentification JWT
+2. **stores_magasin** - Magasins avec coordonnées GPS
+3. **products_produit** - Produits avec images
+4. **suppliers_fournisseur** - Fournisseurs
+5. **stock_stock** - Stocks par magasin
+6. **stock_mouvement** - Mouvements de stock
+7. **attendance_presence** - Présences/pointages
+8. **messaging_message** - Messages entre utilisateurs
 
-### Pour les Administrateurs
-1. Connectez-vous avec un compte admin
-2. Créez des magasins avec leurs coordonnées GPS
-3. Ajoutez des produits avec images
-4. Gérez les fournisseurs et commandes
-5. Consultez les statistiques sur le dashboard
+## 🔄 API Endpoints
 
-### Pour les Employés
-1. Connectez-vous avec un compte employé
-2. Effectuez votre pointage quotidien
-3. Consultez le stock de votre magasin
-4. Enregistrez les mouvements de stock
+### Authentification
+```
+POST /api/auth/login/          # Connexion
+POST /api/auth/logout/         # Déconnexion
+GET  /api/auth/me/             # Utilisateur actuel
+```
+
+### Produits
+```
+GET    /api/products/           # Liste des produits
+POST   /api/products/           # Créer un produit
+PUT    /api/products/{id}/      # Modifier un produit
+DELETE /api/products/{id}/      # Supprimer un produit
+```
+
+### Magasins
+```
+GET    /api/stores/             # Liste des magasins
+POST   /api/stores/             # Créer un magasin
+PUT    /api/stores/{id}/        # Modifier un magasin
+DELETE /api/stores/{id}/        # Supprimer un magasin
+```
+
+### Stock
+```
+GET    /api/stock/stocks/       # Liste des stocks
+POST   /api/stock/stocks/       # Créer un stock
+GET    /api/stock/mouvements/   # Liste des mouvements
+POST   /api/stock/mouvements/   # Créer un mouvement
+```
+
+## 📁 Gestion des fichiers
+
+Les images sont stockées localement dans Django :
+- **Dossier** : `backend/media/`
+- **URL** : `http://localhost:8000/media/...`
 
 ## 🔒 Sécurité
 
-- **Authentification obligatoire** : Aucun accès sans connexion
+- **JWT Authentication** : Tokens sécurisés avec rotation
 - **Géolocalisation sécurisée** : Pointage uniquement sur site (100m)
 - **Rôles stricts** : Permissions selon le profil utilisateur
-- **Protection des routes** : Accès contrôlé par composant
+- **Protection CORS** : Accès contrôlé depuis React
 
 ## 🚢 Déploiement
 
-### Firebase Hosting
-
-1. **Installer Firebase CLI**
-```bash
-npm install -g firebase-tools
-```
-
-2. **Initialiser Firebase**
-```bash
-firebase init hosting
-```
-
-3. **Build et déployer**
-```bash
-npm run build
-firebase deploy
-```
+### Production
+1. Configurer une base de données MySQL de production
+2. Mettre à jour les variables d'environnement
+3. Collecter les fichiers statiques Django : `python manage.py collectstatic`
+4. Builder React : `npm run build`
+5. Configurer un serveur web (Nginx + Gunicorn)
 
 ## 📝 Notes Importantes
 
-- **Pas de données d'exemple** : Toutes les données sont saisies manuellement
+- **Pas de dépendances externes** : Plus de Firebase ou Cloudinary
 - **Géolocalisation requise** : Le pointage nécessite l'autorisation GPS
-- **Images optimisées** : Compression automatique via Firebase Storage
+- **Images optimisées** : Stockage local via Django
 - **Responsive design** : Compatible mobile et desktop
 
 ## 🤝 Support
 
-Pour toute question ou assistance :
-1. Vérifiez la configuration Firebase
-2. Consultez les logs de la console navigateur
-3. Vérifiez les règles de sécurité Firestore
+Pour toute question :
+1. Vérifiez que XAMPP MySQL est démarré
+2. Vérifiez la configuration dans `.env`
+3. Consultez les logs Django et React
+4. Vérifiez les URLs d'API dans le frontend
 
 ---
 
-**StockPro** - Solution professionnelle de gestion de stock multi-magasin
+**StockPro** - Solution professionnelle 100% Django + React
